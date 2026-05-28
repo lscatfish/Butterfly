@@ -1,0 +1,43 @@
+# SolidWorks temp/lock files
+~$*
+*.sldprt.bak
+*.sldasm.bak
+*.slddrw.bak
+*.tmp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Generated outputs (reproducible from Python scripts)
+*.png
+*.json
+*.csv
+
+# Build/dist
+build/
+dist/
+*.egg-info/
