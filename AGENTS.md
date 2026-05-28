@@ -104,5 +104,15 @@ chord_distribution.csv      输出：弦长分布数据
 | 空气密度 ρ | 1.225 kg/m³ | 标准海平面 |
 | 运动粘度 ν | 1.46e-5 m²/s | 标准海平面 |
 
+## Dynamic Analysis (`dynamic_analysis.py`)
+新增功能（2026-05-29）：
+1. **时间域仿真**：模拟一个完整周期（2000 点）的力变化，包含平动升力/阻力、旋转力、附加质量力。
+2. **攻角翻转模型**：在 stroke reversal 处平滑过渡（过渡区占周期 8%），使用数值梯度计算 α̇。
+3. **参数扫描**：频率 10-25 Hz、幅度 60-140°、攻角 20-70°，输出阻力/升力随参数变化曲线。
+4. **Markdown 报告**：自动生成 `气动分析报告.md`，包含参数表、结果表、图表引用、SolidWorks 导出步骤。
+
+> **重要**：早期 VBA 导出的 `wing_axis.csv`、`wing_back.csv`、`wing_front.csv` 已废弃（全局坐标，含 20m 构造线），已重命名为 `_old`。所有分析现在严格基于 DXF 文件。
+
 ## Git
 - `.gitignore` 已配置，忽略 `*.png`, `*.json`, `*.csv`, Python cache, SolidWorks 临时文件。
+- 但 `气动分析报告.md` 和 `wing_analysis_results.json` 建议保留（分析结果）。
