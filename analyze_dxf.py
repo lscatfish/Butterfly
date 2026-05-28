@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-读取 WingFront.DXF / WingBack.DXF / WingsAxis.DXF
-计算翅膀几何参数与气动估算
+仿生蝴蝶翅膀几何参数提取与气动力分解分析
+读取 DXF (WingFront / WingBack / WingsAxis) → 面积、弦长分布、面积矩
+准定常力分解：平动升力/阻力、旋转力、附加质量力、时均值
 """
 
 import numpy as np
@@ -18,83 +19,60 @@ plt.rcParams['axes.unicode_minus'] = False
 DATA_DIR = Path(__file__).parent
 MM_TO_M = 1e-3
 
+# ==================== 用户设计参数 ====================
 AERO_PARAMS = {
-    "rho": 1.225,
-    "nu": 1.46e-5,
-    "m_total": 0.0216,
-    "f": 10.0,
-    "Phi_max_deg": 80.0,
-    "alpha_deg": 45.0,
+    "rho": 1.225,           # 空气密度 kg/m³
+    "nu": 1.46e-5,          # 运动粘度 m²/s
+    "m_total": 0.025,       # 总质量 25g
+    "m_wing_total": 0.004,  # 四翅总质量 4g
+    "f": 17.5,              # 典型频率 Hz (范围 15-20)
+    "Phi_max_deg": 100.0,   # 单向扇动幅度 ° (>90°)
+    "alpha_deg": 45.0,      # 攻角 °
+    "C_r": 1.5,             # 旋转力系数 (Dickinson 1.0-2.0)
+    "flip_ratio": 0.10,     # 翻转占周期比例 (~10%)
 }
 
 
 def parse_dxf(filepath):
     """解析 DXF，提取 SPLINE / LINE / CIRCLE 实体"""
     with open(filepath) as f:
-        lines = [l.strip() for l in f.readlines()]
-    
-    entities = []
-    i = 0
-    while i < len(lines):
-        if lines[i] == '0':
-            etype = lines[i + 1] if i + 1 < len(lines) else ''
-            if etype in ('SPLINE', 'LINE', 'CIRCLE'):
-                j = i + 2
-                data = {}
-                ctrl_pts = []
-                fit_pts = []
-                knots = []
-                
-                while j < len(lines) and lines[j] != '0':
-                    if j + 1 >= len(lines):
-                        j += 1
-                        continue
-                    code = lines[j]
-                    val = lines[j + 1]
-                    j += 2
-                    
-                    if code == '71':
-                        data['degree'] = int(float(val))
-                    elif code == '72':
-                        data['n_fit'] = int(float(val))
-                    elif code == '73':
-                        data['n_ctrl'] = int(float(val))
-                    elif code == '40':
-                        knots.append(float(val))
-                    elif code == '10':
-                        if j + 1 < len(lines) and lines[j] == '20':
-                            ctrl_pts.append([float(val), float(lines[j + 1])])
-                            j += 2
-                    elif code == '11':
-                        if j + 1 < len(lines) and lines[j] == '21':
-                            fit_pts.append([float(val), float(lines[j + 1])])
-                            j += 2
-                    elif code in ('10', '20', '30', '11', '21', '31', '40'):
-                        # 单个值存储
-                        try:
-                            data[code] = float(val)
-                        except:
-                            data[code] = val
-                
-                if etype == 'SPLINE':
-                    entities.append({
-                        'type': 'SPLINE',
-                        'degree': data.get('degree', 3),
-                        'ctrl_pts': np.array(ctrl_pts),
-                        'fit_pts': np.array(fit_pts),
-                        'knots': np.array(knots),
-                    })
-                elif etype == 'LINE':
-                    # 需要重新读取起终点（上面的通用解析可能不够准，简化处理）
-                    pass
-            i += 1
-        i += 1
-    
-    # 重新扫描 LINE 和 CIRCLE（更可靠）
-    with open(filepath) as f:
         content = f.read()
     
-    # LINE: 10,20,30 = start; 11,21,31 = end
+    entities = []
+    # SPLINE
+    parts = content.split('\n  0\nSPLINE\n')
+    for part in parts[1:]:
+        lines_b = part.strip().split('\n')
+        idx = 0
+        data = {}
+        ctrl_pts = []
+        fit_pts = []
+        knots = []
+        while idx < len(lines_b) - 1:
+            code = lines_b[idx].strip()
+            if code == '0':
+                break
+            val = lines_b[idx + 1].strip()
+            if code == '71':
+                data['degree'] = int(float(val))
+            elif code == '40':
+                knots.append(float(val))
+            elif code == '10' and idx + 3 < len(lines_b) and lines_b[idx + 2].strip() == '20':
+                ctrl_pts.append([float(val), float(lines_b[idx + 3].strip())])
+                idx += 2
+            elif code == '11' and idx + 3 < len(lines_b) and lines_b[idx + 2].strip() == '21':
+                fit_pts.append([float(val), float(lines_b[idx + 3].strip())])
+                idx += 2
+            idx += 2
+        entities.append({
+            'type': 'SPLINE',
+            'degree': data.get('degree', 3),
+            'ctrl_pts': np.array(ctrl_pts),
+            'fit_pts': np.array(fit_pts),
+            'knots': np.array(knots),
+        })
+    
+    # LINE
     line_blocks = content.split('\n  0\nLINE\n')
     for block in line_blocks[1:]:
         d = {}
@@ -102,6 +80,8 @@ def parse_dxf(filepath):
         idx = 0
         while idx < len(lines_b) - 1:
             code = lines_b[idx].strip()
+            if code == '0':
+                break
             val = lines_b[idx + 1].strip()
             if code in ('10', '20', '30', '11', '21', '31'):
                 d[code] = float(val)
@@ -113,7 +93,7 @@ def parse_dxf(filepath):
                 'end': np.array([d['11'], d['21']]),
             })
     
-    # CIRCLE: 10,20,30 = center; 40 = radius
+    # CIRCLE
     circle_blocks = content.split('\n  0\nCIRCLE\n')
     for block in circle_blocks[1:]:
         d = {}
@@ -121,6 +101,8 @@ def parse_dxf(filepath):
         idx = 0
         while idx < len(lines_b) - 1:
             code = lines_b[idx].strip()
+            if code == '0':
+                break
             val = lines_b[idx + 1].strip()
             if code in ('10', '20', '30', '40'):
                 d[code] = float(val)
@@ -136,55 +118,35 @@ def parse_dxf(filepath):
 
 
 def sample_spline(entity, n=200):
-    """对 DXF SPLINE 采样 n 个点"""
     ctrl = entity['ctrl_pts']
     knots = entity['knots']
     k = entity['degree']
-    
     if len(ctrl) == 0:
         return np.zeros((0, 2))
-    
-    # 如果拟合点存在且足够，直接用拟合点
     fit = entity['fit_pts']
     if len(fit) >= 4:
         return fit
-    
-    # 否则用 scipy BSpline 重建
     if len(knots) < len(ctrl) + k + 1:
-        # 节点向量不够，用均匀节点
         knots = np.linspace(0, 1, len(ctrl) + k + 1)
-    
-    # scipy BSpline 要求节点向量有 k+1 个重复端点
-    # DXF 的节点向量通常已经是规范的
     try:
         t = np.array(knots)
         c = ctrl
-        # 确保维度匹配
         if len(t) >= len(c) + k + 1:
-            # 取前 len(c)+k+1 个节点
             t = t[:len(c) + k + 1]
-        
-        # 归一化到 [0,1]
         if t[-1] > t[0]:
             t_norm = (t - t[0]) / (t[-1] - t[0])
         else:
             t_norm = t
-        
-        # 分别对 x, y 做 B-spline
         spl_x = BSpline(t_norm, c[:, 0], k)
         spl_y = BSpline(t_norm, c[:, 1], k)
-        
-        u = np.linspace(t_norm[k], t_norm[-k-1], n)
-        x = spl_x(u)
-        y = spl_y(u)
-        return np.column_stack([x, y])
+        u = np.linspace(t_norm[k], t_norm[-k - 1], n)
+        return np.column_stack([spl_x(u), spl_y(u)])
     except Exception as e:
-        print(f"BSpline failed: {e}, fallback to ctrl_pts")
+        print(f"BSpline warn: {e}")
         return ctrl
 
 
-def get_segment_points(entity, n=200):
-    """获取任意 entity 的点序列"""
+def get_segment_points(entity, n=2000):
     if entity['type'] == 'SPLINE':
         return sample_spline(entity, n)
     elif entity['type'] == 'LINE':
@@ -192,120 +154,81 @@ def get_segment_points(entity, n=200):
     return np.zeros((0, 2))
 
 
-def segment_start_end(pts):
-    if len(pts) == 0:
-        return None, None
-    return pts[0], pts[-1]
-
-
 def connect_entities(entities):
-    """按端点距离贪心连接所有实体"""
-    # 只处理 SPLINE 和 LINE
     segs = []
     for e in entities:
         if e['type'] in ('SPLINE', 'LINE'):
-            pts = get_segment_points(e, n=200 if e['type'] == 'SPLINE' else 2)
+            pts = get_segment_points(e, n=2000 if e['type'] == 'SPLINE' else 2)
             if len(pts) > 0:
                 segs.append(pts)
-    
     if len(segs) == 0:
         return None
-    
-    # 贪心连接
     used = [False] * len(segs)
     ordered = [segs[0]]
     used[0] = True
     current_end = segs[0][-1]
-    
     for _ in range(len(segs) - 1):
-        best_idx = -1
-        best_dist = float('inf')
-        best_reverse = False
-        
+        best_idx, best_dist, best_reverse = -1, float('inf'), False
         for i in range(len(segs)):
             if used[i]:
                 continue
             s, e = segs[i][0], segs[i][-1]
-            # 正向：当前尾接 seg 头
             d = np.linalg.norm(s - current_end)
             if d < best_dist:
-                best_dist = d
-                best_idx = i
-                best_reverse = False
-            # 反向：当前尾接 seg 尾
+                best_dist, best_idx, best_reverse = d, i, False
             d = np.linalg.norm(e - current_end)
             if d < best_dist:
-                best_dist = d
-                best_idx = i
-                best_reverse = True
-        
-        if best_idx < 0 or best_dist > 1.0:  # 1mm 容差
+                best_dist, best_idx, best_reverse = d, i, True
+        if best_idx < 0 or best_dist > 1.0:
             break
-        
         used[best_idx] = True
-        if best_reverse:
-            ordered.append(segs[best_idx][::-1])
-            current_end = segs[best_idx][0]
-        else:
-            ordered.append(segs[best_idx])
-            current_end = segs[best_idx][-1]
-    
-    all_pts = np.vstack(ordered)
-    return all_pts
+        ordered.append(segs[best_idx][::-1] if best_reverse else segs[best_idx])
+        current_end = segs[best_idx][0] if best_reverse else segs[best_idx][-1]
+    return np.vstack(ordered)
 
 
 def read_axis_from_dxf(filepath):
-    """从 WingsAxis.DXF 读取两个圆心作为轴线"""
     entities = parse_dxf(filepath)
     circles = [e for e in entities if e['type'] == 'CIRCLE']
     if len(circles) < 2:
-        raise ValueError(f"轴线 DXF 中需要 2 个圆，只找到 {len(circles)} 个")
-    
+        raise ValueError(f"轴线 DXF 需要 2 个圆，只找到 {len(circles)} 个")
     p0 = circles[0]['center']
     p1 = circles[1]['center']
     direction = p1 - p0
     dir_len = np.linalg.norm(direction)
     unit_dir = direction / dir_len if dir_len > 0 else np.array([1.0, 0.0])
     unit_perp = np.array([-unit_dir[1], unit_dir[0]])
-    
-    return {
-        'p0': p0,
-        'p1': p1,
-        'unit_dir': unit_dir,
-        'unit_perp': unit_perp,
-    }
+    return {'p0': p0, 'p1': p1, 'unit_dir': unit_dir, 'unit_perp': unit_perp}
 
 
 def calculate_wing(pts, axis, wing_name, n_bins=200):
-    """计算翅膀几何参数"""
-    # 多边形面积（鞋带公式）
+    """计算翅膀几何参数（使用带符号 y，不取 abs）"""
     def shoelace(poly):
         x, y = poly[:, 0], poly[:, 1]
         return 0.5 * abs(np.dot(x[:-1], y[1:]) - np.dot(y[:-1], x[1:]))
     
     S_poly = shoelace(pts)
     
-    # 局部坐标转换
+    # 局部坐标
     v = pts - axis['p0']
-    r = v @ axis['unit_dir']   # 沿转轴
-    y = v @ axis['unit_perp']  # 垂直转轴（展向）
+    r = v @ axis['unit_dir']    # 弦向（沿转轴）
+    y = v @ axis['unit_perp']   # 展向（垂直转轴，带符号）
     
-    # 展长 = |y| 范围
-    y_abs = np.abs(y)
-    R = y_abs.max() - y_abs.min()
+    # 展长 = y 的总跨度（单侧或双侧）
+    y_min, y_max = y.min(), y.max()
+    R = y_max - y_min
     
     if R < 1e-6:
         print(f"[{wing_name}] 展长过小")
         return None
     
-    # 沿展向分条算弦长
-    y_min, y_max = y_abs.min(), y_abs.max()
+    # 沿展向分条算弦长 c(y)
     bins = np.linspace(y_min, y_max, n_bins + 1)
     y_centers = 0.5 * (bins[:-1] + bins[1:])
     chords = np.zeros(n_bins)
     
     for i in range(n_bins):
-        mask = (y_abs >= bins[i]) & (y_abs < bins[i + 1])
+        mask = (y >= bins[i]) & (y < bins[i + 1])
         if np.any(mask):
             chords[i] = r[mask].max() - r[mask].min()
     
@@ -320,13 +243,17 @@ def calculate_wing(pts, axis, wing_name, n_bins=200):
     c_hat = chords / c_avg if c_avg > 0 else np.zeros_like(chords)
     y_hat = (y_centers - y_min) / R
     
-    # 面积矩
+    # 面积矩（注意：使用原始 y 坐标，不取 abs）
     valid = chords > 1e-10
-    r1 = integrate.simpson(y_hat[valid] * c_hat[valid], y_hat[valid]) if np.any(valid) else 0
-    r2_sq = integrate.simpson(y_hat[valid]**2 * c_hat[valid], y_hat[valid]) if np.any(valid) else 0
+    if np.any(valid):
+        # r̂ = (y - y_min) / R，在 [0,1] 区间
+        r1 = integrate.simpson(y_hat[valid] * c_hat[valid], y_hat[valid])
+        r2_sq = integrate.simpson(y_hat[valid]**2 * c_hat[valid], y_hat[valid])
+    else:
+        r1 = r2_sq = 0.0
     
-    # 质心
-    y_cg = integrate.simpson(y_centers * chords, y_centers) / S if S > 0 else 0
+    # 质心展向位置
+    y_cg = integrate.simpson(y_centers * chords, y_centers) / S if S > 0 else 0.0
     y_cg_hat = (y_cg - y_min) / R
     
     return {
@@ -356,7 +283,24 @@ def aerodynamic_estimate(props, params):
     Phi_max = np.deg2rad(params['Phi_max_deg'])
     alpha_deg = params['alpha_deg']
     m_total = params['m_total']
+    m_wing_total = params['m_wing_total']
     nu = params['nu']
+    C_r = params['C_r']
+    flip_ratio = params['flip_ratio']
+    
+    # 运动学参数
+    phi_dot_max = 2 * np.pi * f * Phi_max
+    phi_ddot_max = (2 * np.pi * f)**2 * Phi_max
+    alpha_rad = np.deg2rad(alpha_deg)
+    
+    # 翻转角速度：90°翻转占周期 flip_ratio
+    T = 1.0 / f
+    dt_flip = flip_ratio * T
+    alpha_dot_max = (np.pi / 2) / dt_flip  # 90° = π/2 rad
+    
+    # 升阻力系数
+    C_L = 0.255 + 1.58 * np.sin(np.deg2rad(2.13 * alpha_deg - 7.2))
+    C_D = 1.92 - 1.55 * np.cos(np.deg2rad(2.04 * alpha_deg - 9.82))
     
     results = {}
     for p in props:
@@ -364,69 +308,133 @@ def aerodynamic_estimate(props, params):
         S = p['S']
         R = p['R']
         c_avg = p['c_avg']
+        r1 = p['r1']
         r2_sq = p['r2_sq']
         
-        phi_dot_max = 2 * np.pi * f * Phi_max
-        C_L = 0.255 + 1.58 * np.sin(np.deg2rad(2.13 * alpha_deg - 7.2))
-        C_D = 1.92 - 1.55 * np.cos(np.deg2rad(2.04 * alpha_deg - 9.82))
+        # 单翅质量（四翅均分）
+        m_w = m_wing_total / 4.0
         
-        F_L_peak = 0.5 * rho * C_L * (phi_dot_max * R)**2 * S * r2_sq
+        # 翼尖速度
         u_tip_max = phi_dot_max * R
         u_mean = (2.0 / np.pi) * u_tip_max
+        
+        # 雷诺数、减缩频率
         Re = u_mean * c_avg / nu
         omega = 2 * np.pi * f
         k = omega * c_avg / (2 * u_mean) if u_mean > 0 else 0
         
-        m_w = m_total * 0.05
+        # ====== 力分解（峰值）======
+        # 1. 平动升力（拍动中期，|φ̇|最大）
+        F_trans_lift = 0.5 * rho * C_L * (phi_dot_max * R)**2 * S * r2_sq
+        # 2. 平动阻力（拍动中期）
+        F_trans_drag = 0.5 * rho * C_D * (phi_dot_max * R)**2 * S * r2_sq
+        
+        # 3. 旋转力（翻转时，|α̇|最大）
+        # F_rot = ρ C_r α̇ φ̇ c² R² r̂₁  （简化峰值估算）
+        F_rot = rho * C_r * alpha_dot_max * phi_dot_max * c_avg**2 * R**2 * r1
+        
+        # 4. 附加质量力（反转点，|φ̈|最大）
+        # F_AM = (ρ π c² / 4) φ̈ R r̂₁ sinα
+        F_AM = (rho * np.pi * c_avg**2 / 4.0) * phi_ddot_max * R * r1 * np.sin(alpha_rad)
+        
+        # 5. 总峰值力（保守：平动+旋转+附加质量，不同时刻出现）
+        # 拍动中期峰值：平动主导
+        F_peak_mid = F_trans_lift
+        # 反转点峰值：旋转+附加质量（平动≈0）
+        F_peak_rev = abs(F_rot) + abs(F_AM)
+        # 绝对最大峰值
+        F_peak_total = max(F_peak_mid, F_peak_rev)
+        
+        # ====== 时间平均力 ======
+        # 平动力：cos² 平均 = 1/2
+        F_avg_trans_lift = F_trans_lift / 2.0
+        F_avg_trans_drag = F_trans_drag / 2.0
+        # 旋转力：只在两次反转时出现，占周期 2*flip_ratio
+        F_avg_rot = abs(F_rot) * (2 * flip_ratio)
+        # 附加质量力：周期对称，时均≈0
+        F_avg_AM = 0.0
+        # 总时均升力
+        F_avg_lift = F_avg_trans_lift + F_avg_rot + F_avg_AM
+        
+        # 转动惯量 & 功率
         I_w = m_w * R**2 * r2_sq
         KE = 0.5 * I_w * phi_dot_max**2
         P_inertial = 4 * KE * f
         
         results[name] = {
-            'C_L': C_L, 'C_D': C_D,
+            'C_L': C_L,
+            'C_D': C_D,
             'phi_dot_max_rad_s': phi_dot_max,
+            'phi_ddot_max_rad_s2': phi_ddot_max,
+            'alpha_dot_max_rad_s': alpha_dot_max,
             'u_tip_max_m_s': u_tip_max,
             'u_mean_m_s': u_mean,
-            'Re': Re, 'k': k,
-            'F_L_peak_N': F_L_peak,
-            'F_L_peak_mN': F_L_peak * 1000,
-            'm_w_kg': m_w,
-            'I_w_kg_m2': I_w,
+            'Re': Re,
+            'k': k,
+            'm_w_g': m_w * 1000,
+            'I_w_g_mm2': I_w * 1e9,
+            
+            # 峰值力 (N)
+            'F_trans_lift_peak_N': F_trans_lift,
+            'F_trans_drag_peak_N': F_trans_drag,
+            'F_rot_peak_N': F_rot,
+            'F_AM_peak_N': F_AM,
+            'F_peak_total_N': F_peak_total,
+            
+            # 峰值力 (mN)
+            'F_trans_lift_peak_mN': F_trans_lift * 1000,
+            'F_trans_drag_peak_mN': F_trans_drag * 1000,
+            'F_rot_peak_mN': F_rot * 1000,
+            'F_AM_peak_mN': F_AM * 1000,
+            'F_peak_total_mN': F_peak_total * 1000,
+            
+            # 时均力 (mN)
+            'F_avg_trans_lift_mN': F_avg_trans_lift * 1000,
+            'F_avg_trans_drag_mN': F_avg_trans_drag * 1000,
+            'F_avg_rot_mN': F_avg_rot * 1000,
+            'F_avg_lift_mN': F_avg_lift * 1000,
+            
             'KE_mJ': KE * 1000,
             'P_inertial_mW': P_inertial * 1000,
         }
     
-    total_lift = sum(results[n]['F_L_peak_N'] for n in results)
+    # 四翅总力（2 front + 2 back）
     weight = m_total * 9.81
+    total_peak_lift = 2 * sum(results[n]['F_peak_total_N'] for n in results)
+    total_avg_lift = 2 * sum(results[n]['F_avg_lift_mN'] for n in results)
+    total_avg_drag = 2 * sum(results[n]['F_avg_trans_drag_mN'] for n in results)
+    
     results['total'] = {
-        'F_L_peak_total_N': total_lift,
-        'F_L_peak_total_mN': total_lift * 1000,
         'weight_N': weight,
         'weight_mN': weight * 1000,
-        'lift_to_weight': total_lift / weight if weight > 0 else 0,
+        'total_peak_lift_N': total_peak_lift,
+        'total_peak_lift_mN': total_peak_lift * 1000,
+        'total_avg_lift_mN': total_avg_lift,
+        'total_avg_drag_mN': total_avg_drag,
+        'avg_lift_to_weight': total_avg_lift / (weight * 1000) if weight > 0 else 0,
     }
     return results
 
 
 def plot_results(axis, front_prop, back_prop, output_dir):
-    fig = plt.figure(figsize=(16, 10))
+    fig = plt.figure(figsize=(18, 12))
     
-    # 全局坐标
+    # 1. DXF Global
     ax1 = fig.add_subplot(2, 3, 1)
-    for prop, color in [(front_prop, 'blue'), (back_prop, 'green')]:
+    for prop, color, lbl in [(front_prop, 'blue', 'Front'), (back_prop, 'green', 'Back')]:
         if prop:
             pts = prop['pts']
             ax1.fill(pts[:, 0], pts[:, 1], alpha=0.3, color=color)
-            ax1.plot(pts[:, 0], pts[:, 1], color=color, lw=1.5, label=prop['name'])
+            ax1.plot(pts[:, 0], pts[:, 1], color=color, lw=1.5, label=lbl)
     ax1.plot([axis['p0'][0], axis['p1'][0]], [axis['p0'][1], axis['p1'][1]], 'r--', lw=2, label='Axis')
     ax1.set_aspect('equal')
     ax1.set_xlabel('X (mm)')
     ax1.set_ylabel('Y (mm)')
-    ax1.set_title('DXF Global')
-    ax1.legend()
+    ax1.set_title('Wing Planform (DXF)')
+    ax1.legend(loc='upper right')
     ax1.grid(True, alpha=0.3)
     
-    # 局部坐标
+    # 2. Local coords
     ax2 = fig.add_subplot(2, 3, 2)
     for prop, color in [(front_prop, 'blue'), (back_prop, 'green')]:
         if prop:
@@ -438,23 +446,23 @@ def plot_results(axis, front_prop, back_prop, output_dir):
     ax2.axvline(x=0, color='r', linestyle='--', lw=1)
     ax2.set_xlabel('y: spanwise (mm)')
     ax2.set_ylabel('r: chordwise (mm)')
-    ax2.set_title('Local coords')
+    ax2.set_title('Local Coordinates')
     ax2.legend()
     ax2.grid(True, alpha=0.3)
     
-    # 弦长分布
+    # 3. Chord distribution
     ax3 = fig.add_subplot(2, 3, 3)
     for prop, color in [(front_prop, 'blue'), (back_prop, 'green')]:
         if prop:
             ax3.plot(prop['y_hat'], prop['c_hat'], color=color, lw=2, label=prop['name'])
     ax3.axhline(y=1.0, color='k', linestyle='--', lw=1, alpha=0.5)
-    ax3.set_xlabel('y_hat = y/R')
+    ax3.set_xlabel('y_hat = (y-y_min)/R')
     ax3.set_ylabel('c_hat = c/c_avg')
-    ax3.set_title('Chord distribution')
+    ax3.set_title('Chord Distribution')
     ax3.legend()
     ax3.grid(True, alpha=0.3)
     
-    # 局部填充
+    # 4. Local filled
     ax4 = fig.add_subplot(2, 3, 4)
     for prop, color in [(front_prop, 'blue'), (back_prop, 'green')]:
         if prop:
@@ -467,35 +475,39 @@ def plot_results(axis, front_prop, back_prop, output_dir):
     ax4.axvline(x=0, color='r', linestyle='--', lw=1)
     ax4.set_xlabel('y (mm)')
     ax4.set_ylabel('r (mm)')
-    ax4.set_title('Local filled')
+    ax4.set_title('Local Filled')
     ax4.grid(True, alpha=0.3)
     
-    # 参数表
+    # 5. 参数表
     ax5 = fig.add_subplot(2, 3, 5)
     ax5.axis('off')
     rows = []
     for p in [front_prop, back_prop]:
         if p:
-            rows.append([
-                p['name'],
-                f"{p['S_mm2']:.1f}",
-                f"{p['R_mm']:.1f}",
-                f"{p['c_avg_mm']:.1f}",
-                f"{p['AR']:.2f}",
-                f"{p['r2_sq']:.4f}",
-            ])
+            rows.append([p['name'], f"{p['S_mm2']:.1f}", f"{p['R_mm']:.1f}",
+                         f"{p['c_avg_mm']:.1f}", f"{p['AR']:.2f}", f"{p['r2_sq']:.4f}"])
     if rows:
-        tbl = ax5.table(
-            cellText=rows,
-            colLabels=['Wing', 'S(mm2)', 'R(mm)', 'c_avg(mm)', 'AR', 'r2_sq'],
-            loc='center', cellLoc='center'
-        )
+        tbl = ax5.table(cellText=rows,
+                        colLabels=['Wing', 'S(mm2)', 'R(mm)', 'c_avg(mm)', 'AR', 'r2_sq'],
+                        loc='center', cellLoc='center')
         tbl.auto_set_font_size(False)
         tbl.set_fontsize(10)
         tbl.scale(1.2, 1.8)
     
-    # 空位
+    # 6. 力分解柱状图（峰值）
     ax6 = fig.add_subplot(2, 3, 6)
+    names = []
+    lift_vals = []
+    drag_vals = []
+    rot_vals = []
+    am_vals = []
+    for p in [front_prop, back_prop]:
+        if p:
+            names.append(p['name'])
+    
+    # 需要 aero 结果才能画图，这里简化留空或后续补
+    ax6.text(0.5, 0.5, 'See console output\nfor force breakdown', ha='center', va='center', fontsize=12)
+    ax6.set_title('Force Breakdown (console)')
     ax6.axis('off')
     
     plt.tight_layout()
@@ -504,89 +516,94 @@ def plot_results(axis, front_prop, back_prop, output_dir):
     plt.close()
 
 
+def print_force_breakdown(aero):
+    """在控制台清晰输出力分解（单翅 + 四翅总计）"""
+    print("\n" + "=" * 70)
+    print("FORCE BREAKDOWN")
+    print("=" * 70)
+    
+    total = aero['total']
+    print(f"\n[四翅总计]  Weight        = {total['weight_mN']:.2f} mN")
+    print(f"[四翅总计]  Peak Lift     = {total['total_peak_lift_mN']:.2f} mN")
+    print(f"[四翅总计]  Avg Lift      = {total['total_avg_lift_mN']:.2f} mN")
+    print(f"[四翅总计]  Avg Drag      = {total['total_avg_drag_mN']:.2f} mN  <-- 重点")
+    print(f"[四翅总计]  Lift/Weight   = {total['avg_lift_to_weight']:.2f}")
+    
+    for name in ['Front', 'Back']:
+        if name not in aero:
+            continue
+        r = aero[name]
+        print(f"\n--- {name.upper()} WING (单翅) ---")
+        print(f"  Mass        = {r['m_w_g']:.2f} g")
+        print(f"  Re          = {r['Re']:.0f}")
+        print(f"  k           = {r['k']:.3f}")
+        print(f"  u_tip_max   = {r['u_tip_max_m_s']:.2f} m/s")
+        print(f"  phi_dot_max = {r['phi_dot_max_rad_s']:.1f} rad/s")
+        print(f"  alpha_dot   = {r['alpha_dot_max_rad_s']:.1f} rad/s")
+        
+        print(f"\n  [峰值力]")
+        print(f"    Translational Lift = {r['F_trans_lift_peak_mN']:>10.2f} mN")
+        print(f"    Translational Drag = {r['F_trans_drag_peak_mN']:>10.2f} mN  <--")
+        print(f"    Rotational Force   = {r['F_rot_peak_mN']:>10.2f} mN")
+        print(f"    Added Mass Force   = {r['F_AM_peak_mN']:>10.2f} mN")
+        print(f"    Peak Total         = {r['F_peak_total_mN']:>10.2f} mN")
+        
+        print(f"\n  [时均力]")
+        print(f"    Avg Lift (trans)   = {r['F_avg_trans_lift_mN']:>10.2f} mN")
+        print(f"    Avg Drag (trans)   = {r['F_avg_trans_drag_mN']:>10.2f} mN  <--")
+        print(f"    Avg Rotational     = {r['F_avg_rot_mN']:>10.2f} mN")
+        print(f"    Avg Total Lift     = {r['F_avg_lift_mN']:>10.2f} mN")
+        
+        print(f"\n  [功率]")
+        print(f"    Inertial Power     = {r['P_inertial_mW']:>10.2f} mW")
+    
+    print("\n" + "=" * 70)
+    print("NOTE: 以上力值基于准定常模型估算，实际飞行中受三维效应、")
+    print("      涡脱落、柔性变形等因素影响，真实力可能低 30-50%。")
+    print("=" * 70)
+
+
 def main():
-    print("=" * 60)
-    print("DXF Wing Analysis")
-    print("=" * 60)
+    print("=" * 70)
+    print("BUTTERFLY WING AERODYNAMIC ANALYSIS")
+    print("=" * 70)
     
     axis = read_axis_from_dxf(DATA_DIR / 'WingsAxis.DXF')
-    print(f"\n[Axis]")
-    print(f"  p0: ({axis['p0'][0]:.3f}, {axis['p0'][1]:.3f}) mm")
-    print(f"  p1: ({axis['p1'][0]:.3f}, {axis['p1'][1]:.3f}) mm")
-    print(f"  Length: {np.linalg.norm(axis['p1'] - axis['p0']):.3f} mm")
+    print(f"\n[Axis]  p0=({axis['p0'][0]:.2f},{axis['p0'][1]:.2f})  p1=({axis['p1'][0]:.2f},{axis['p1'][1]:.2f})  "
+          f"L={np.linalg.norm(axis['p1']-axis['p0']):.2f} mm")
     
     front_entities = parse_dxf(DATA_DIR / 'WingFront.DXF')
     back_entities = parse_dxf(DATA_DIR / 'WingBack.DXF')
     
-    print(f"\n[Entities]")
-    print(f"  Front: {len([e for e in front_entities if e['type'] in ('SPLINE', 'LINE')])} segments")
-    print(f"  Back:  {len([e for e in back_entities if e['type'] in ('SPLINE', 'LINE')])} segments")
-    
     front_pts = connect_entities(front_entities)
     back_pts = connect_entities(back_entities)
-    
-    if front_pts is not None:
-        print(f"  Front connected: {len(front_pts)} pts")
-    if back_pts is not None:
-        print(f"  Back connected:  {len(back_pts)} pts")
     
     front_prop = calculate_wing(front_pts, axis, "Front") if front_pts is not None else None
     back_prop = calculate_wing(back_pts, axis, "Back") if back_pts is not None else None
     
-    print("\n" + "=" * 60)
-    print("Geometry Results")
-    print("=" * 60)
-    
+    print("\n" + "=" * 70)
+    print("GEOMETRY")
+    print("=" * 70)
     all_props = []
     for p in [front_prop, back_prop]:
         if p is None:
             continue
         all_props.append(p)
-        print(f"\n--- {p['name']} ---")
-        print(f"  Area S       = {p['S_mm2']:.3f} mm2  ({p['S']*1e4:.4f} cm2)")
-        print(f"  Span R       = {p['R_mm']:.2f} mm")
-        print(f"  Avg chord    = {p['c_avg_mm']:.2f} mm")
-        print(f"  Aspect AR    = {p['AR']:.3f}")
-        print(f"  CG span      = {p['y_cg']*1000:.2f} mm")
-        print(f"  r1           = {p['r1']:.4f}")
-        print(f"  r2_sq        = {p['r2_sq']:.4f}")
+        print(f"\n{p['name']}: S={p['S_mm2']:.1f} mm2  R={p['R_mm']:.1f} mm  "
+              f"c_avg={p['c_avg_mm']:.1f} mm  AR={p['AR']:.2f}  r2_sq={p['r2_sq']:.4f}")
     
-    if not all_props:
-        print("ERROR: No valid wings")
-        return
-    
-    total_S = sum(p['S'] for p in all_props)
-    print(f"\n  Total area   = {total_S*1e6:.3f} mm2")
-    
-    # 气动
-    print("\n" + "=" * 60)
-    print("Aerodynamics")
-    print("=" * 60)
     aero = aerodynamic_estimate(all_props, AERO_PARAMS)
+    print_force_breakdown(aero)
     
-    for name, res in aero.items():
-        if name == 'total':
-            continue
-        print(f"\n--- {name} ---")
-        print(f"  C_L        = {res['C_L']:.3f}")
-        print(f"  Re         = {res['Re']:.0f}")
-        print(f"  F_L_peak   = {res['F_L_peak_mN']:.3f} mN")
-        print(f"  P_inertial = {res['P_inertial_mW']:.2f} mW")
-    
-    total = aero['total']
-    print(f"\n--- Total ---")
-    print(f"  Lift (2w)  = {total['F_L_peak_total_mN']:.3f} mN")
-    print(f"  Weight     = {total['weight_mN']:.3f} mN")
-    print(f"  L/W        = {total['lift_to_weight']:.2f}")
-    
-    # 保存
+    # 保存 JSON
     save_data = {
+        'params': AERO_PARAMS,
         'axis': {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in axis.items()},
-        'geometry': [{k: float(v) if isinstance(v, (np.floating, float)) else v 
+        'geometry': [{k: float(v) if isinstance(v, (np.floating, float)) else v
                       for k, v in p.items() if k not in ('y_hat', 'c_hat', 'y_centers_mm', 'chords_mm', 'pts')}
                      for p in all_props],
-        'aerodynamics': {k: {kk: float(vv) if isinstance(vv, (np.floating, float)) else vv 
-                            for kk, vv in v.items()} 
+        'aerodynamics': {k: {kk: float(vv) if isinstance(vv, (np.floating, float)) else vv
+                            for kk, vv in v.items()}
                         for k, v in aero.items()},
     }
     json_path = DATA_DIR / 'wing_analysis_results.json'
@@ -594,32 +611,21 @@ def main():
         json.dump(save_data, f, indent=2)
     print(f"\nSaved JSON: {json_path}")
     
-    # 保存弦长分布 CSV
+    # 保存弦长分布
     if front_prop and back_prop:
         chord_df = pd.DataFrame({
             'y_hat': front_prop['y_hat'],
             'c_hat_front': front_prop['c_hat'],
-            'c_hat_back': np.interp(
-                front_prop['y_hat'],
-                back_prop['y_hat'],
-                back_prop['c_hat'],
-                left=0, right=0
-            ),
+            'c_hat_back': np.interp(front_prop['y_hat'], back_prop['y_hat'], back_prop['c_hat'], left=0, right=0),
             'y_center_mm': front_prop['y_centers_mm'],
             'chord_front_mm': front_prop['chords_mm'],
-            'chord_back_mm': np.interp(
-                front_prop['y_centers_mm'],
-                back_prop['y_centers_mm'],
-                back_prop['chords_mm'],
-                left=0, right=0
-            ),
+            'chord_back_mm': np.interp(front_prop['y_centers_mm'], back_prop['y_centers_mm'], back_prop['chords_mm'], left=0, right=0),
         })
-        chord_path = DATA_DIR / 'chord_distribution.csv'
-        chord_df.to_csv(chord_path, index=False)
-        print(f"Saved chord: {chord_path}")
+        chord_df.to_csv(DATA_DIR / 'chord_distribution.csv', index=False)
+        print(f"Saved chord_distribution.csv")
     
     plot_results(axis, front_prop, back_prop, DATA_DIR)
-    print("Done!")
+    print("\nDone!")
 
 
 if __name__ == '__main__':

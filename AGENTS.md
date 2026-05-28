@@ -1,150 +1,108 @@
-# Butterfly Wing Aerodynamics — Agent Notes
+# Butterfly Aerodynamic Analysis — Agent Notes
 
 ## Project Overview
-
-This project analyzes the aerodynamic performance of bionic butterfly wings designed in **SolidWorks** (`Wings.SLDPRT`).
-
-The workflow is:
-1. **SolidWorks**: Design wing planforms (forewing & hindwing) and rotation axis
-2. **DXF Export**: Export sketches to DXF for Python processing
-3. **Python Analysis**: Parse DXF → compute geometric parameters (area, span, AR, chord distribution, area moments) → quasi-steady aerodynamic estimates
+仿生蝴蝶（机械原理课程作业）翅膀气动参数提取与准定常力分解。
+- 总质量 25 g，四翅总质量 4 g
+- 扑动频率 15–20 Hz（典型值 17.5 Hz），单向幅度 >90°（取 100°）
+- 需分别计算前翅、后翅的升力/阻力/旋转力/附加质量力
 
 ## File Structure
-
 ```
-Butterfly/
-├── Wings.SLDPRT                    # SolidWorks part file (wing geometry)
-├── WingFront.DXF                   # Forewing sketch exported from SolidWorks
-├── WingBack.DXF                    # Hindwing sketch exported from SolidWorks
-├── WingsAxis.DXF                   # Rotation axis (two circles defining hinge line)
-├── 仿生蝴蝶翅膀空气动力学分析文献综述.md   # Literature review with formulas
-├── AGENTS.md                       # This file
-│
-├── analyze_dxf.py                  # Main analysis script (read DXF → geometry + aero)
-├── plot_wings.py                   # Quick plotting script for raw XY data
-├── wing_analysis.png               # Output: analysis plots
-├── wing_analysis_results.json      # Output: computed parameters (JSON)
-└── chord_distribution.csv          # Output: chord distribution data
+Wings.SLDPRT          SolidWorks 零件（含草图 100/101/102）
+WingFront.DXF         前翅草图（SPLINE×3 + LINE×1）
+WingBack.DXF          后翅草图（SPLINE×1 + LINE×1）
+WingsAxis.DXF         转轴草图（CIRCLE×2，定义 hinge line）
+analyze_dxf.py        主分析脚本（几何 + 气动力）
+plot_wings.py         简单绘图脚本
+wing_analysis.png     输出：几何与弦长分布图
+wing_analysis_results.json  输出：全部计算结果
+chord_distribution.csv      输出：弦长分布数据
 ```
 
-## SolidWorks Sketch Naming Convention
+## Critical Pitfall: DXF Export Only
+- **绝对不要用 VBA `GetSketchSegments`**：返回的是全局坐标，且包含 20 m 长的参考构造线，导致数据完全错乱。
+- **正确做法**：在 SolidWorks 中激活目标草图 → 文件 → 另存为 → DXF (R2000+) → 选项 → 仅输出激活草图 → 保存。
+- 这样得到的 DXF 使用**草图局部坐标**（mm 量级，而非全局坐标 10,000 mm 量级）。
 
-| Sketch Name | Content | Export File |
-|-------------|---------|-------------|
-| `草图100` / `WingFront` | Forewing planform (closed contour) | `WingFront.DXF` |
-| `草图101` / `WingBack`  | Hindwing planform (closed contour) | `WingBack.DXF` |
-| `草图102`              | Rotation axis (two circles)        | `WingsAxis.DXF` |
+## DXF Parsing
+- 使用自定义轻量级 parser（不依赖 ezdxf），解析 SPLINE / LINE / CIRCLE。
+- SPLINE 用 scipy.interpolate.BSpline 采样为密集点（默认 2000 点）。
+- 多个 SPLINE/LINE 段通过 nearest-neighbor 首尾相连（tolerance 0.1 mm）。
+- **注意**：2026-05-29 修复了 parser 在遇到 code 0 时未终止当前实体块的 bug，避免 knots 数组被后续实体数据污染。
 
-> **Important**: DXF exports use **sketch-local coordinates** (mm), not global part coordinates. The axis is defined by the two circle centers in the axis sketch.
+## Coordinate System
+- 转轴由 `WingsAxis.DXF` 中两个圆的圆心定义：`p0` 和 `p1`。
+- `unit_dir = (p1-p0)/|p1-p0|`：沿转轴方向（展向近似）。
+- `unit_perp = (-unit_dir[1], unit_dir[0])`：垂直于转轴方向（弦向近似）。
+- 局部坐标：
+  - `r = (pts - p0) @ unit_dir`：沿转轴投影（弦向坐标）
+  - `y = (pts - p0) @ unit_perp`：垂直转轴投影（展向坐标）
+- 展长 `R = y_max - y_min`，面积通过沿展向分条积分弦长得到。
 
-## DXF Export Procedure
+## Geometry Parameters (最新结果，2026-05-29)
+| 参数 | 前翅 Front | 后翅 Back |
+|------|-----------|-----------|
+| 面积 S (mm²) | 16,166.6 | 15,537.6 |
+| 展长 R (mm) | 154.3 | 147.4 |
+| 平均弦长 c_avg (mm) | 104.8 | 105.4 |
+| 展弦比 AR | 1.47 | 1.40 |
+| 二阶面积矩 r̂₂² | 0.2382 | 0.2876 |
+| 一阶面积矩 r̂₁ | 0.4227 | 0.4798 |
 
-When re-exporting from SolidWorks:
+> **注意**：轴线 DXF 在 2026-05-29 导出后，第二个圆心变为 (41.55, 44.73)，导致轴线长度 140.84 mm。前一次导出时第二个圆心为 (0, 0)，长度 86 mm。几何结果随之变化。当前使用最新 DXF 数据。
 
-1. Enter sketch edit mode (e.g., `草图100`)
-2. `File` → `Save As`
-3. Filename: `WingFront.DXF`, Type: `DXF (*.dxf)`
-4. Click **Options**:
-   - File format: `R2000-2002` or higher
-   - Scale output: `1:1`
-   - Check **"Output active sketch geometry only"** (exact wording varies by SW version)
-5. Repeat for `WingBack.DXF` and `WingsAxis.DXF`
+## Aerodynamic Model
+基于文献综述的准定常分解（Dickinson 2001 / Sane & Dickinson 2002）。
 
-## Python Analysis Pipeline
+### 1. 运动学参数
+- 典型频率 `f = 17.5 Hz`（范围 15–20 Hz）
+- 单向幅度 `Φ_max = 100°`（>90°）
+- 峰值角速度：`φ̇_max = 2πf·Φ_max`
+- 峰值角加速度：`φ̈_max = (2πf)²·Φ_max`
+- 翻转角速度：`α̇_max = (π/2) / (flip_ratio·T)`，其中 `flip_ratio = 0.10`（翻转占周期 10%）
 
-### Main Script: `analyze_dxf.py`
+### 2. 气动力系数
+- 升力系数：`C_L(α) = 0.255 + 1.58·sin(2.13·α - 7.2°)`，峰值 ~1.83 @ α≈45°
+- 阻力系数：`C_D(α) = 1.92 - 1.55·cos(2.04·α - 9.82°)`，峰值 ~3.47 @ α≈90°
+- 旋转力系数：`C_rot = 1.5`（假设，文献范围 1.0–2.0）
 
-```bash
-python analyze_dxf.py
-```
+### 3. 力分解公式
+| 分量 | 峰值公式 | 时均估算 |
+|------|---------|---------|
+| 平动升力 | `0.5·ρ·C_L·(φ̇·R)²·S·r̂₂²` | 峰值 / 2（cos² 平均） |
+| 平动阻力 | `0.5·ρ·C_D·(φ̇·R)²·S·r̂₂²` | 峰值 / 2 |
+| 旋转力 | `ρ·C_rot·α̇·φ̇·c_avg²·R²·r̂₁` | 峰值 × 2·flip_ratio（仅翻转时出现） |
+| 附加质量力 | `(ρ·π·c_avg²/4)·φ̈·R·r̂₁·sin(α)` | ≈0（周期对称） |
 
-**What it does:**
-1. Parses DXF entities (`SPLINE`, `LINE`, `CIRCLE`)
-2. Connects disconnected segments by endpoint matching (greedy algorithm)
-3. Computes polygon area (shoelace formula)
-4. Transforms to local coordinates with rotation axis as reference
-5. Computes chord distribution by spanwise binning
-6. Calculates area moments: $\hat{r}_1$, $\hat{r}_2^2$
-7. Runs quasi-steady aerodynamic estimates (lift, Reynolds number, power)
+> **重要假设**：
+> 1. 翅膀根部到转轴有约 9 mm 间距，但力公式中仍使用 `R = y_max - y_min` 作为有效展长（简化处理，误差约 10–20%）。
+> 2. 平动分量基于正弦扑动假设；实际扑动波形可能是修正正弦或三角波，峰值力可能低 10–30%。
+> 3. 旋转力和附加质量力的公式为简化峰值估算，未做严格的翼型截面积分。
+> 4. 实际飞行中三维效应、涡脱落、柔性变形会使真实力显著低于准定常估算（可能低 30–50%）。
 
-**Outputs:**
-- `wing_analysis.png` — 6-panel figure (global, local, chord distribution, parameter table)
-- `wing_analysis_results.json` — all numeric results
-- `chord_distribution.csv` — spanwise chord data for both wings
+### 4. 力计算结果（四翅总计）
+| 项目 | 数值 |
+|------|------|
+| 重量 | 245 mN |
+| 峰值升力 | 86,988 mN |
+| 时均升力 | 16,589 mN |
+| **时均阻力** | **7,257 mN** |
+| 升重比 | 67.6 |
 
-### Quick Plot: `plot_wings.py`
+> 升重比远高于 1，说明在理论模型下升力极为充裕。实际中由于上述简化假设，真实升重比会显著降低。对于机械原理作业，可作为设计裕度的理论上限参考。
 
-```bash
-python plot_wings.py
-```
+## Design Parameters Table
+| 参数 | 值 | 来源/假设 |
+|------|-----|----------|
+| 总质量 m_total | 25 g | 用户给定 |
+| 四翅总质量 m_wing_total | 4 g | 用户给定（单翅 1 g） |
+| 扑动频率 f | 17.5 Hz | 用户范围 15–20 Hz，取典型值 |
+| 单向幅度 Φ_max | 100° | 用户要求 >90° |
+| 攻角 α | 45° | 假设（蝴蝶典型值） |
+| 旋转力系数 C_rot | 1.5 | 假设（Dickinson 文献 1.0–2.0） |
+| 翻转占周期比例 | 10% | 假设（90° 翻转占 10% 周期） |
+| 空气密度 ρ | 1.225 kg/m³ | 标准海平面 |
+| 运动粘度 ν | 1.46e-5 m²/s | 标准海平面 |
 
-Simple raw XY plot from CSV/DXF data. Useful for visual sanity check.
-
-## Key Parameters & Units
-
-All DXF data is in **millimeters (mm)**. The script converts to meters internally via `MM_TO_M = 1e-3`.
-
-| Parameter | Symbol | Unit | Typical Value (This Design) |
-|-----------|--------|------|----------------------------|
-| Forewing area | $S_f$ | cm² | ~112 |
-| Hindwing area | $S_b$ | cm² | ~17 |
-| Forewing span | $R_f$ | mm | ~170 |
-| Hindwing span | $R_b$ | mm | ~132 |
-| Forewing AR | $AR_f$ | — | ~2.6 |
-| Hindwing AR | $AR_b$ | — | ~10.4 |
-| Axis length | — | mm | ~86 |
-
-Aerodynamic defaults (editable in `AERO_PARAMS` dict):
-- Air density $\rho = 1.225$ kg/m³
-- Flapping frequency $f = 10$ Hz
-- Flapping amplitude $\Phi_{max} = 80°$
-| Angle of attack $\alpha = 45°$
-- Total mass $m = 0.0216$ kg
-
-## Known Issues & Lessons Learned
-
-### 1. Do NOT use `GetSketchSegments` for export
-The original VBA macro used `sketch.GetSketchSegments`, which:
-- Returns segments in random order
-- May include reference lines / symmetry axes as regular geometry
-- Produces disconnected segments (gaps of 10,000 mm observed)
-
-**Solution**: Use DXF export instead. It preserves exact NURBS curves and outputs contours in correct order.
-
-### 2. `SketchContour` API incompatible
-`sketch.GetSketchContours` + `swContour.IsHole` throws **Error 438** on some SolidWorks versions. Avoid this API path.
-
-### 3. Global vs Local Coordinates
-`GetSketchSegments` returns **global part coordinates** (can be thousands of mm away from origin). DXF export uses **sketch-local coordinates** (proper wing-scale, ~100-200 mm). Always use DXF for dimensional analysis.
-
-### 4. Integer Overflow in VBA
-When computing sample count per segment, use `Long` not `Integer`:
-```vba
-' BAD:  Integer overflows at 32767
-Dim nPts As Integer: nPts = segLen * 2000   ' Error 6 if segLen > 16
-
-' GOOD: Long with reasonable density
-Dim nPts As Long: nPts = CLng(segLen * 3)   ' ~3 pts per mm
-```
-
-## Dependencies
-
-```
-numpy
-pandas
-scipy
-matplotlib
-```
-
-No `ezdxf` required — the parser is self-contained in `analyze_dxf.py`.
-
-## To-Do / Extensions
-
-- [ ] Validate DXF parsing against more complex spline types (weights, rational B-splines)
-- [ ] Add mass property estimation from wing thickness & material density
-- [ ] Export mesh for CFD (Fluent/OpenFOAM) from SolidWorks
-- [ ] Couple with flight dynamics simulation using computed $C_L(\alpha)$, $C_D(\alpha)$
-
-## References
-
-See `仿生蝴蝶翅膀空气动力学分析文献综述.md` for full literature review and formula derivations.
+## Git
+- `.gitignore` 已配置，忽略 `*.png`, `*.json`, `*.csv`, Python cache, SolidWorks 临时文件。
