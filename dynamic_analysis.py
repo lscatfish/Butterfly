@@ -86,42 +86,49 @@ def simulate_cycle(geo_item, params, n_points=2000):
     t = np.linspace(0, T, n_points)
     dt = t[1] - t[0]
     
-    # 运动学
-    phi = Phi * np.sin(omega * t)
-    phi_dot = Phi * omega * np.cos(omega * t)
-    phi_ddot = -Phi * omega**2 * np.sin(omega * t)
+    # 运动学（约定：翅膀向上为正，向下为负）
+    phi = -Phi * np.sin(omega * t)
+    phi_dot = -Phi * omega * np.cos(omega * t)
+    phi_ddot = Phi * omega**2 * np.sin(omega * t)
     
     # 攻角模型：在 stroke reversal 附近平滑翻转
-    # stroke reversal 发生在 phi_dot=0，即 t = T/4 和 3T/4
+    # stroke reversal 发生在 phi 极值点，即 ph = pi/2 和 3pi/2
+    # 约定：phi < 0 为下拍（翅膀向下），phi > 0 为上拍（翅膀向上）
+    phase = np.mod(omega * t, 2*np.pi)
     alpha = np.zeros_like(t)
-    dt_flip = flip_ratio * T / 2  # 过渡区半宽（秒）
+    half_flip = flip_ratio * np.pi  # 过渡区半宽（弧度）
     
-    for i, ti in enumerate(t):
-        # 计算到两个 reversal 点的距离（循环距离）
-        d1 = abs(((ti - T/4 + T/2) % T) - T/2)
-        d2 = abs(((ti - 3*T/4 + T/2) % T) - T/2)
+    for i, ph in enumerate(phase):
+        # 计算到两个翻转点 (pi/2, 3pi/2) 的最小循环距离
+        d1 = abs(((ph - np.pi/2 + np.pi) % (2*np.pi)) - np.pi)
+        d2 = abs(((ph - 3*np.pi/2 + np.pi) % (2*np.pi)) - np.pi)
         d = min(d1, d2)
         
-        if d < dt_flip:
-            # 过渡区：alpha 从 alpha0 线性过渡到 -alpha0
-            frac = d / dt_flip
-            # 根据 stroke 方向确定符号
-            if phi_dot[i] >= 0:
-                alpha[i] = alpha0 * frac
+        # 判断当前 stroke（以下一个 reversal 为准）
+        # 0 < ph < pi/2 或 3pi/2 < ph < 2pi: 下拍区（攻角 +alpha0）
+        # pi/2 < ph < 3pi/2: 上拍区（攻角 -alpha0）
+        is_downstroke = (ph < np.pi/2) or (ph > 3*np.pi/2)
+        
+        if d < half_flip:
+            # 过渡区：alpha 线性过渡到 0
+            frac = d / half_flip
+            if is_downstroke:
+                alpha[i] = alpha0 * frac   # 回到 +alpha0
             else:
-                alpha[i] = -alpha0 * frac
+                alpha[i] = -alpha0 * frac  # 回到 -alpha0
         else:
             # 拍动中期
-            if phi_dot[i] > 0:
-                alpha[i] = alpha0
+            if is_downstroke:
+                alpha[i] = alpha0    # 下拍：+alpha0
             else:
-                alpha[i] = -alpha0
+                alpha[i] = -alpha0   # 上拍：-alpha0
     
-    # 相位（用于绘图）
-    phase = np.mod(omega * t, 2*np.pi)
+    # 确保周期连续性（ph=0 和 ph=2pi 对应同一时刻）
+    alpha[-1] = alpha[0]
     
-    # 数值求导得 alpha_dot
+    # 数值求导得 alpha_dot（确保周期连续性）
     alpha_dot = np.gradient(alpha, dt)
+    alpha_dot[-1] = alpha_dot[0]  # 周期边界保持一致
     
     # 计算各力分量
     C_L_arr = np.zeros_like(t)
@@ -182,6 +189,90 @@ def param_scan(geo_item, param_name, param_range, base_params):
             'peak_drag_N': peak_drag,
         })
     return results
+
+
+def plot_force_vs_phi(front_sim, back_sim, params, output_dir):
+    """绘制力随翅膀转角 φ 的变化（向上为正，向下为负）"""
+    fig, axes = plt.subplots(2, 2, figsize=(14, 11))
+    fig.suptitle('Aerodynamic Forces vs Wing Stroke Angle (φ)\nUpward Positive, Downward Negative',
+                 fontsize=14, fontweight='bold')
+    
+    colors = {'front': '#1f77b4', 'back': '#2ca02c'}
+    
+    # Helper: split into downstroke (phi < 0) and upstroke (phi > 0)
+    def split_stroke(sim):
+        phi = sim['phi_deg']
+        ds = phi <= 0   # 下拍：phi <= 0（向下为负）
+        us = phi >= 0   # 上拍：phi >= 0（向上为正）
+        return ds, us
+    
+    ds_f, us_f = split_stroke(front_sim)
+    ds_b, us_b = split_stroke(back_sim)
+    
+    # Row 0: Lift vs phi
+    ax = axes[0, 0]
+    ax.plot(front_sim['phi_deg'][ds_f], front_sim['F_lift'][ds_f]*1000, 'o-', color=colors['front'], 
+            markersize=2, lw=1.5, label='Front downstroke')
+    ax.plot(front_sim['phi_deg'][us_f], front_sim['F_lift'][us_f]*1000, 's--', color=colors['front'], 
+            markersize=2, lw=1.5, alpha=0.7, label='Front upstroke')
+    ax.axvline(x=0, color='k', linestyle='-', lw=0.5)
+    ax.axhline(y=0, color='k', linestyle='-', lw=0.5)
+    ax.set_xlabel('Stroke angle φ (°)  [Up+, Down-]')
+    ax.set_ylabel('Lift (mN)')
+    ax.set_title('Front Wing - Lift vs φ')
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+    
+    ax = axes[0, 1]
+    ax.plot(back_sim['phi_deg'][ds_b], back_sim['F_lift'][ds_b]*1000, 'o-', color=colors['back'], 
+            markersize=2, lw=1.5, label='Back downstroke')
+    ax.plot(back_sim['phi_deg'][us_b], back_sim['F_lift'][us_b]*1000, 's--', color=colors['back'], 
+            markersize=2, lw=1.5, alpha=0.7, label='Back upstroke')
+    ax.axvline(x=0, color='k', linestyle='-', lw=0.5)
+    ax.axhline(y=0, color='k', linestyle='-', lw=0.5)
+    ax.set_xlabel('Stroke angle φ (°)  [Up+, Down-]')
+    ax.set_ylabel('Lift (mN)')
+    ax.set_title('Back Wing - Lift vs φ')
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+    
+    # Row 1: Drag vs phi (key result)
+    ax = axes[1, 0]
+    ax.fill_between(front_sim['phi_deg'][ds_f], 0, front_sim['F_trans_drag'][ds_f]*1000, 
+                    color='#f44336', alpha=0.3, label='Front downstroke')
+    ax.fill_between(front_sim['phi_deg'][us_f], 0, front_sim['F_trans_drag'][us_f]*1000, 
+                    color='#f44336', alpha=0.15, label='Front upstroke')
+    ax.plot(front_sim['phi_deg'][ds_f], front_sim['F_trans_drag'][ds_f]*1000, 
+            color='#f44336', lw=1.5)
+    ax.plot(front_sim['phi_deg'][us_f], front_sim['F_trans_drag'][us_f]*1000, 
+            '--', color='#f44336', lw=1.5, alpha=0.7)
+    ax.axvline(x=0, color='k', linestyle='-', lw=0.5)
+    ax.set_xlabel('Stroke angle φ (°)  [Up+, Down-]')
+    ax.set_ylabel('Drag (mN)')
+    ax.set_title('Front Wing - Drag vs φ (Key Result)')
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+    
+    ax = axes[1, 1]
+    ax.fill_between(back_sim['phi_deg'][ds_b], 0, back_sim['F_trans_drag'][ds_b]*1000, 
+                    color='#9C27B0', alpha=0.3, label='Back downstroke')
+    ax.fill_between(back_sim['phi_deg'][us_b], 0, back_sim['F_trans_drag'][us_b]*1000, 
+                    color='#9C27B0', alpha=0.15, label='Back upstroke')
+    ax.plot(back_sim['phi_deg'][ds_b], back_sim['F_trans_drag'][ds_b]*1000, 
+            color='#9C27B0', lw=1.5)
+    ax.plot(back_sim['phi_deg'][us_b], back_sim['F_trans_drag'][us_b]*1000, 
+            '--', color='#9C27B0', lw=1.5, alpha=0.7)
+    ax.axvline(x=0, color='k', linestyle='-', lw=0.5)
+    ax.set_xlabel('Stroke angle φ (°)  [Up+, Down-]')
+    ax.set_ylabel('Drag (mN)')
+    ax.set_title('Back Wing - Drag vs φ (Key Result)')
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / 'force_vs_phi.png', dpi=200, bbox_inches='tight')
+    print(f'Saved: {output_dir / "force_vs_phi.png"}')
+    plt.close()
 
 
 def plot_time_domain(front_sim, back_sim, params, output_dir):
@@ -375,10 +466,13 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 
 ## 4. 图表
 
-### 图 1：单周期时间域力曲线
+### 图 1：力随翅膀转角 φ 的变化（向上为正，向下为负）
+![力转角曲线](force_vs_phi.png)
+
+### 图 2：单周期时间域力曲线
 ![力时间曲线](force_time_domain.png)
 
-### 图 2：参数扫描结果
+### 图 3：参数扫描结果
 ![参数扫描](param_scan.png)
 
 ## 5. 关键假设
@@ -441,12 +535,16 @@ def main():
         print(f"  {name}: avg_lift={avg_lift*1000:.1f} mN, avg_drag={avg_drag*1000:.1f} mN, "
               f"peak_lift={peak_lift*1000:.1f} mN, peak_drag={peak_drag*1000:.1f} mN")
     
+    # Plot force vs phi
+    print("\n[2/4] Generating force vs phi plots...")
+    plot_force_vs_phi(front_sim, back_sim, params, DATA_DIR)
+    
     # Plot time domain
-    print("\n[2/3] Generating time-domain plots...")
+    print("\n[3/4] Generating time-domain plots...")
     plot_time_domain(front_sim, back_sim, params, DATA_DIR)
     
     # Param scan
-    print("\n[3/3] Running parameter scans...")
+    print("\n[4/4] Running parameter scans...")
     plot_param_scans(geo, params, DATA_DIR)
     
     # Markdown report
