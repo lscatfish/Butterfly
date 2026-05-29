@@ -115,62 +115,46 @@ def simulate_cycle(geo_item, params, n_points=2000):
             phi_dot[i] = phi_up * (np.pi / t_u) * np.cos(np.pi * tau)
             phi_ddot[i] = -phi_up * (np.pi / t_u)**2 * np.sin(np.pi * tau)
     
-    # ========== 攻角模型 ==========
-    # 翻转点：t=0/T（周期边界）和 t=t_d（下拍→上拍过渡）
-    dt_flip = flip_ratio * min(t_d, t_u) / 2
-    alpha = np.zeros_like(t)
-    
-    for i, ti in enumerate(t):
-        d0 = min(ti, T - ti)          # 到周期边界 t=0/T 的距离
-        d1 = abs(ti - t_d)            # 到 t=t_d 的距离
-        d = min(d0, d1)
-        
-        # 判断 stroke 方向
-        is_downstroke = (0 <= ti < t_d)
-        
-        if d < dt_flip:
-            frac = d / dt_flip
-            if is_downstroke:
-                alpha[i] = alpha0 * frac
-            else:
-                alpha[i] = -alpha0 * frac
-        else:
-            if is_downstroke:
-                alpha[i] = alpha0     # 下拍：+alpha0
-            else:
-                alpha[i] = -alpha0    # 上拍：-alpha0
-    
-    # 确保周期连续性
-    alpha[-1] = alpha[0]
-    alpha_dot = np.gradient(alpha, dt)
-    alpha_dot[-1] = alpha_dot[0]
+    # ========== 固定攻角模型（翅膀安装角固定，不能翻转） ==========
+    # 翅膀安装角始终为 +alpha0
+    # 下拍时：来流相对向上，有效攻角 = +alpha0 → C_L > 0，升力向上
+    # 上拍时：来流相对向下，有效攻角 = -alpha0 → C_L < 0，升力向下
+    alpha = alpha0 * np.ones_like(t)  # 物理安装角始终 +alpha0
+    alpha_dot = np.zeros_like(t)       # 无翻转，alpha_dot = 0
     
     # 计算各力分量
     C_L_arr = np.zeros_like(t)
     C_D_arr = np.zeros_like(t)
-    alpha_deg = np.degrees(alpha)
     for i in range(len(t)):
-        C_L_arr[i], C_D_arr[i] = cl_cd(alpha_deg[i])
+        if 0 <= t[i] < t_d:
+            # 下拍：有效攻角 +alpha0
+            C_L_arr[i], C_D_arr[i] = cl_cd(np.degrees(alpha0))
+        else:
+            # 上拍：来流方向反转，有效攻角 -alpha0
+            C_L_arr[i], C_D_arr[i] = cl_cd(-np.degrees(alpha0))
     
     # 平动分量（与 phi_dot^2 成正比）
+    # 注意：C_L 的符号已经包含了方向信息
+    # 下拍 C_L > 0 → 升力向上；上拍 C_L < 0 → 升力向下
     F_trans_lift = 0.5 * rho * C_L_arr * (phi_dot * R)**2 * S * r2_sq
     F_trans_drag = 0.5 * rho * C_D_arr * (phi_dot * R)**2 * S * r2_sq
     
-    # 旋转力
-    F_rot = rho * C_r * alpha_dot * phi_dot * c_avg**2 * R**2 * r1
+    # 旋转力 = 0（因为 alpha_dot = 0，翅膀不能扭转）
+    F_rot = np.zeros_like(t)
     
-    # 附加质量力
-    F_AM = (rho * np.pi * c_avg**2 / 4.0) * phi_ddot * R * r1 * np.sin(alpha)
+    # 附加质量力（方向由 phi_ddot 和 sin(alpha0) 共同决定）
+    # sin(alpha0) = sin(+45°) = +0.707 始终为正
+    F_AM = (rho * np.pi * c_avg**2 / 4.0) * phi_ddot * R * r1 * np.sin(alpha0)
     
     # 总力
     F_lift = F_trans_lift + F_rot + F_AM
-    F_drag = F_trans_drag  # 阻力主要来自平动分量
+    F_drag = np.abs(F_trans_drag)  # 阻力始终为正（与运动方向相反）
     
     return {
         't': t,
         'phi_deg': np.degrees(phi),
         'phi_dot': phi_dot,
-        'alpha_deg': alpha_deg,
+        'alpha_deg': np.degrees(alpha),
         'alpha_dot': alpha_dot,
         'F_trans_lift': F_trans_lift,
         'F_trans_drag': F_trans_drag,
