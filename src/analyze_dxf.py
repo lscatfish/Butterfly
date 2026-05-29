@@ -30,9 +30,7 @@ AERO_PARAMS = {
     "f": 17.5,              # 典型频率 Hz (范围 15-20)
     "phi_down_deg": 80.0,   # 下拍最大角度 °（向下）
     "phi_up_deg": 60.0,     # 上拍最大角度 °（向上）
-    "alpha_deg": 45.0,      # 攻角 °
-    "C_r": 1.5,             # 旋转力系数 (Dickinson 1.0-2.0)
-    "flip_ratio": 0.08,     # 翻转占半拍比例 (过渡区占半拍 8%)
+    "alpha_deg": 45.0,      # 攻角 °（固定安装角）
 }
 
 
@@ -333,8 +331,8 @@ def aerodynamic_estimate(props, params):
         F_rot = 0.0
         
         # 4. 附加质量力（反转点，|φ̈|最大）
-        # F_AM = (ρ π c² / 4) φ̈ R r̂₁ sinα
-        F_AM = (rho * np.pi * c_avg**2 / 4.0) * phi_ddot_max * R * r1 * np.sin(alpha_rad)
+        # F_AM = -(ρ π c² / 4) φ̈ R r̂₁ sinα（阻力加速度）
+        F_AM = -(rho * np.pi * c_avg**2 / 4.0) * phi_ddot_max * R * r1 * np.sin(alpha_rad)
         
         # 5. 总峰值力（平动峰值和AM峰值不同时出现，取较大者）
         F_peak_total = max(F_trans_lift, abs(F_AM))

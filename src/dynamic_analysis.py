@@ -30,11 +30,9 @@ AERO_PARAMS = {
     "m_total": 0.025,       # 总质量 25g
     "m_wing_total": 0.004,  # 四翅总质量 4g
     "f": 17.5,              # 典型频率 Hz (范围 15-20)
-    "phi_down_deg": 80.0,   # 下拍最大角度（向下，取正值表示幅度）
-    "phi_up_deg": 60.0,     # 上拍最大角度（向上，取正值表示幅度）
-    "alpha_deg": 45.0,      # 攻角 °
-    "C_r": 1.5,             # 旋转力系数 (Dickinson 1.0-2.0)
-    "flip_ratio": 0.08,     # 翻转占半拍时间的比例（反转过渡区）
+    "phi_down_deg": 80.0,   # 下拍最大角度（向下）
+    "phi_up_deg": 60.0,     # 上拍最大角度（向上）
+    "alpha_deg": 45.0,      # 攻角 °（固定安装角）
 }
 
 
@@ -71,14 +69,16 @@ def simulate_cycle(geo_item, params, n_points=2000):
     """模拟一个完整周期的气动力
     
     返回 dict 包含 t, phase, phi, phi_dot, phi_ddot, alpha_deg, 以及各力分量
+    
+    关键修正：
+    - C_L 基于瞬时速度方向（φ̇ 符号），而非时间相位
+    - F_AM = -(ρπc²/4)·φ̈·R·r₁·sin(α)，附加质量力阻力加速度
     """
     f = params['f']
     phi_down = np.deg2rad(params['phi_down_deg'])
     phi_up = np.deg2rad(params['phi_up_deg'])
-    alpha0 = np.deg2rad(params['alpha_deg'])  # 转为弧度计算
+    alpha0 = np.deg2rad(params['alpha_deg'])
     rho = params['rho']
-    C_r = params['C_r']
-    flip_ratio = params['flip_ratio']
     
     S = geo_item['S']
     R = geo_item['R']
@@ -116,21 +116,21 @@ def simulate_cycle(geo_item, params, n_points=2000):
             phi_ddot[i] = -phi_up * (np.pi / t_u)**2 * np.sin(np.pi * tau)
     
     # ========== 固定攻角模型（翅膀安装角固定，不能翻转） ==========
-    # 翅膀安装角始终为 +alpha0
-    # 下拍时：来流相对向上，有效攻角 = +alpha0 → C_L > 0，升力向上
-    # 上拍时：来流相对向下，有效攻角 = -alpha0 → C_L < 0，升力向下
+    # 物理安装角始终 +alpha0；有效攻角由 φ̇ 方向决定
+    # φ̇ ≤ 0（向下运动）→ 相对来流从下方 → 有效攻角 +α → C_L > 0
+    # φ̇ > 0（向上运动）→ 相对来流从上方 → 有效攻角 -α → C_L < 0
     alpha = alpha0 * np.ones_like(t)  # 物理安装角始终 +alpha0
     alpha_dot = np.zeros_like(t)       # 无翻转，alpha_dot = 0
     
-    # 计算各力分量
+    # 计算各力分量 — C_L 基于瞬时速度方向（φ̇ 符号决定有效攻角）
     C_L_arr = np.zeros_like(t)
     C_D_arr = np.zeros_like(t)
     for i in range(len(t)):
-        if 0 <= t[i] < t_d:
-            # 下拍：有效攻角 +alpha0
+        if phi_dot[i] <= 0:
+            # 翅膀向下运动 → 相对来流从下方 → 有效攻角 +α
             C_L_arr[i], C_D_arr[i] = cl_cd(np.degrees(alpha0))
         else:
-            # 上拍：来流方向反转，有效攻角 -alpha0
+            # 翅膀向上运动 → 相对来流从上方 → 有效攻角 -α
             C_L_arr[i], C_D_arr[i] = cl_cd(-np.degrees(alpha0))
     
     # 平动分量（与 phi_dot^2 成正比）
@@ -142,13 +142,9 @@ def simulate_cycle(geo_item, params, n_points=2000):
     # 旋转力 = 0（因为 alpha_dot = 0，翅膀不能扭转）
     F_rot = np.zeros_like(t)
     
-    # Dickinson附加质量力: F_AM = (ρπc²/4) * (u·u̇)/|u| * sin(α)
-    # (u·u̇)/|u| = sign(φ̇) * φ̈ * R  for φ̇ ≠ 0
-    # At φ̇ = 0 (stroke reversal): limit = -φ̈ * R (opposes acceleration)
-    safe_factor = np.where(np.abs(phi_dot) > 1e-6,
-                           np.sign(phi_dot) * phi_ddot,
-                           -phi_ddot)
-    F_AM = (rho * np.pi * c_avg**2 / 4.0) * safe_factor * R * r1 * np.sin(alpha0)
+    # 附加质量力：F_AM = -(ρπc²/4)·φ̈·R·r₁·sin(α)
+    # 阻力加速度（a_n = φ̈·R·sinα），与 φ̇ 方向无关
+    F_AM = -(rho * np.pi * c_avg**2 / 4.0) * phi_ddot * R * r1 * np.sin(alpha0)
     
     # 总力
     F_lift = F_trans_lift + F_rot + F_AM
@@ -526,9 +522,8 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 | 扑动频率 | {params['f']} Hz | 典型值，范围 10-25 Hz |
 | 下拍幅度 | {params['phi_down_deg']}° | 向下最大角度 |
 | 上拍幅度 | {params['phi_up_deg']}° | 向上最大角度 |
-| 攻角 | {params['alpha_deg']}° | 典型值 |
+| 攻角 | {params['alpha_deg']}° | 固定安装角，无翻转 |
 | 空气密度 | 1.225 kg/m³ | 海平面 |
-| 旋转力系数 C_r | {params['C_r']} | 文献范围 1.0-2.0 |
 
 ## 2. 几何参数（由 DXF 实测）
 
