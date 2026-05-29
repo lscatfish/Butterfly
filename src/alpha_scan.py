@@ -58,8 +58,8 @@ def plot_alpha_scan(alphas, front_net, front_drag, back_net, back_drag):
     ld_ratio = np.where(total_drag > 0, total_net / total_drag, 0)
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 11))
-    fig.suptitle(f'Installation Angle Scan: Net Lift & Drag vs α (f={AERO_PARAMS["f"]}Hz,'
-                 f' 下拍{AERO_PARAMS["phi_down_deg"]}° 上拍{AERO_PARAMS["phi_up_deg"]}°)',
+    fig.suptitle(f'Installation Angle Scan: Net Lift & Drag vs α (f={AERO_PARAMS["f"]}Hz, '
+                 f'原始机构角度)',
                  fontsize=14, fontweight='bold')
 
     colors = {'front': '#1f77b4', 'back': '#2ca02c', 'total': '#d62728'}
@@ -154,8 +154,8 @@ def main():
     print("=" * 70)
     print("INSTALLATION ANGLE (α) SCAN")
     print("=" * 70)
-    print(f"  频率 = {AERO_PARAMS['f']} Hz,  下拍 = {AERO_PARAMS['phi_down_deg']}°,  "
-          f"上拍 = {AERO_PARAMS['phi_up_deg']}°")
+    print(f"  频率 = {AERO_PARAMS['f']} Hz")
+    print(f"  机构原始角度，不做缩放（负值=下拍，正值=上拍）")
     print(f"  重量 = {WEIGHT_mN:.1f} mN")
 
     geo = load_geometry()

@@ -20,11 +20,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 
 DEFAULT_PARAMS = {
-    "a": 8.0,        # 主点轨迹圆圆心 x
-    "b": 6.0,        # 主点轨迹圆圆心 y
-    "R": 2.25,       # 主点轨迹圆半径（控制摆幅和运动不对称性）
-    "c": 14.0,       # 直线方程常数参数
-    "l": 8.0,        # 固定圆 x²+y²=l² 半径
+    "a": 8.0,        # 主点轨迹圆圆心 x（可调，6-14）
+    "b": 6.97,       # 主点轨迹圆圆心 y（固定）
+    "R": 2.25,       # 主点轨迹圆半径（固定）
+    "c": 14.0,       # 直线方程常数（固定）
+    "l": 8.0,        # 固定圆 x²+y²=l² 半径（固定）
 }
 
 
@@ -92,21 +92,26 @@ def mechanism_cycle(params: dict = None, n_points: int = 2000):
             idx = np.argmax(rx)
             x_intersect[i] = rx[idx]
             y_intersect[i] = ry[idx]
-            phi_raw[i] = np.arctan2(ry[idx], rx[idx])
+            phi_raw[i] = -np.arctan2(ry[idx], rx[idx])
 
     valid = ~np.isnan(phi_raw)
     if valid.sum() < 2:
         raise RuntimeError("机构无有效交点，检查参数（特别是 R 不要太大）")
 
+    # 先填充 NaN（环形插值），再解缠绕
+    phi_filled = phi_raw.copy()
+    if np.any(~valid):
+        valid_idx = np.where(valid)[0]
+        all_idx = np.arange(n_points)
+        phi_filled[~valid] = np.interp(all_idx[~valid], valid_idx, phi_raw[valid_idx], period=n_points)
+    
     # 解缠绕用于连续微分
-    phi_unwrap = np.unwrap(phi_raw)
-    # 原始振荡角（直接 atan2 取值，已正确处理 [-π,π] 区间）
-    # 居中：使摆动围绕 0
-    phi_center = 0.5 * (np.nanmin(phi_raw[valid]) + np.nanmax(phi_raw[valid]))
-    phi_stroke = phi_raw - phi_center
+    phi_unwrap = np.unwrap(phi_filled)
+    # 保留原始角度，不居中（0° = 翅膀水平位置）
+    phi_stroke = phi_unwrap.copy()
 
-    phi_min = np.nanmin(phi_stroke)
-    phi_max = np.nanmax(phi_stroke)
+    phi_min = float(np.min(phi_stroke))
+    phi_max = float(np.max(phi_stroke))
     span = phi_max - phi_min
 
     return {
@@ -226,21 +231,21 @@ if __name__ == '__main__':
     print("前置机构运动学测试")
     print("=" * 60)
 
-    # 扫描不同 R
-    for R in [2.0, 2.25, 3.0, 4.0, 5.0]:
-        p = {**DEFAULT_PARAMS, 'R': R}
+    # 扫描不同 a（b=6.97, R=2.25 固定）
+    for a_val in np.arange(6, 15, 1):
+        p = {**DEFAULT_PARAMS, 'a': float(a_val)}
         try:
             mech = mechanism_cycle(p, n_points=720)
-            print(f"R={R:.2f}: span={mech['span_deg']:.1f}°  "
+            print(f"a={a_val:.0f}: span={mech['span_deg']:.1f}°  "
                   f"range=[{np.rad2deg(mech['phi_min_rad']):.1f}, {np.rad2deg(mech['phi_max_rad']):.1f}]°  "
                   f"valid={mech['n_valid']}")
         except RuntimeError as e:
-            print(f"R={R:.2f}: ERROR - {e}")
+            print(f"a={a_val:.0f}: ERROR - {e}")
 
     # 生成翅膀运动学
-    print("\n--- wing_kinematics ---")
+    print("\n--- wing_kinematics (a=8.0) ---")
     t, phi, phi_dot, phi_ddot, info = wing_kinematics(
-        f=17.5, params={'R': 2.25}, phi_down_deg=80, phi_up_deg=60)
+        f=17.5, params={'a': 8.0}, phi_down_deg=80, phi_up_deg=60)
     print(f"f={info['f_Hz']} Hz, T={info['T_s']*1000:.1f} ms")
     print(f"Raw span={info['raw_span_deg']:.1f}°, scale={info['scale_factor']:.3f}")
     print(f"Effective: down={info['effective_phi_deg'][0]:.1f}°, up={info['effective_phi_deg'][1]:.1f}°")
@@ -249,7 +254,7 @@ if __name__ == '__main__':
 
     # 对比图
     fig, axes = plt.subplots(2, 2, figsize=(13, 10))
-    fig.suptitle('Mechanism-Based Wing Kinematics (f=17.5 Hz, R=2.25)', fontsize=14, fontweight='bold')
+    fig.suptitle('Mechanism-Based Wing Kinematics (f=17.5 Hz, a=8.0)', fontsize=14, fontweight='bold')
 
     ax = axes[0, 0]
     ax.plot(t * 1000, np.rad2deg(phi), 'b-', lw=2)
