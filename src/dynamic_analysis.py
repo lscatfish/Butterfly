@@ -154,6 +154,7 @@ def simulate_cycle(geo_item, params, n_points=2000):
         't': t,
         'phi_deg': np.degrees(phi),
         'phi_dot': phi_dot,
+        'phi_ddot': phi_ddot,
         'alpha_deg': np.degrees(alpha),
         'alpha_dot': alpha_dot,
         'F_trans_lift': F_trans_lift,
@@ -370,6 +371,82 @@ def plot_time_domain(front_sim, back_sim, params, output_dir):
     plt.close()
 
 
+def plot_acceleration(front_sim, back_sim, params, output_dir):
+    """绘制翅膀角速度与角加速度"""
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle(f'Wing Kinematic Acceleration (f={params["f"]}Hz, φ=-{params["phi_down_deg"]}°~+{params["phi_up_deg"]}°)',
+                 fontsize=14, fontweight='bold')
+    
+    t = front_sim['t']
+    T = t[-1]
+    t_ms = t * 1000
+    
+    # 下拍/上拍分界时间
+    phi_down = np.deg2rad(params['phi_down_deg'])
+    phi_up = np.deg2rad(params['phi_up_deg'])
+    t_d = T * phi_down / (phi_down + phi_up)
+    
+    colors = {'front': '#1f77b4', 'back': '#2ca02c'}
+    
+    # Row 0: Angular velocity
+    ax = axes[0, 0]
+    ax.plot(t_ms, front_sim['phi_dot'], color=colors['front'], lw=2, label='Front')
+    ax.plot(t_ms, back_sim['phi_dot'], '--', color=colors['back'], lw=2, label='Back')
+    ax.axvline(x=t_d*1000, color='gray', linestyle=':', lw=1.5, alpha=0.7)
+    ax.axhline(y=0, color='black', lw=0.5)
+    ax.set_ylabel('Angular velocity (rad/s)')
+    ax.set_title('Angular Velocity vs Time')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(0, T*1000)
+    # 标注下拍/上拍
+    ax.text(t_d*1000/2, ax.get_ylim()[1]*0.85, 'Downstroke', ha='center', fontsize=9, color='#666')
+    ax.text(t_d*1000 + (T-t_d)*1000/2, ax.get_ylim()[1]*0.85, 'Upstroke', ha='center', fontsize=9, color='#666')
+    
+    ax = axes[0, 1]
+    ax.plot(t_ms, np.degrees(front_sim['phi_dot']), color=colors['front'], lw=2, label='Front')
+    ax.plot(t_ms, np.degrees(back_sim['phi_dot']), '--', color=colors['back'], lw=2, label='Back')
+    ax.axvline(x=t_d*1000, color='gray', linestyle=':', lw=1.5, alpha=0.7)
+    ax.axhline(y=0, color='black', lw=0.5)
+    ax.set_ylabel('Angular velocity (°/s)')
+    ax.set_title('Angular Velocity (deg/s)')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(0, T*1000)
+    
+    # Row 1: Angular acceleration
+    ax = axes[1, 0]
+    ax.plot(t_ms, front_sim['phi_ddot'], color=colors['front'], lw=2, label='Front')
+    ax.plot(t_ms, back_sim['phi_ddot'], '--', color=colors['back'], lw=2, label='Back')
+    ax.axvline(x=t_d*1000, color='gray', linestyle=':', lw=1.5, alpha=0.7)
+    ax.axhline(y=0, color='black', lw=0.5)
+    ax.set_xlabel('Time (ms)')
+    ax.set_ylabel('Angular acceleration (rad/s^2)')
+    ax.set_title('Angular Acceleration vs Time')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(0, T*1000)
+    
+    ax = axes[1, 1]
+    ax.plot(t_ms, front_sim['phi_ddot']*1000, color=colors['front'], lw=2, label='Front')
+    ax.plot(t_ms, back_sim['phi_ddot']*1000, '--', color=colors['back'], lw=2, label='Back')
+    ax.axvline(x=t_d*1000, color='gray', linestyle=':', lw=1.5, alpha=0.7)
+    ax.axhline(y=0, color='black', lw=0.5)
+    ax.set_xlabel('Time (ms)')
+    ax.set_ylabel('Angular acceleration (x10^3 rad/s^2)')
+    ax.set_title('Angular Acceleration (scaled)')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(0, T*1000)
+    
+    plt.tight_layout()
+    figures_dir = output_dir / 'figures'
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(figures_dir / 'wing_acceleration.png', dpi=200, bbox_inches='tight')
+    print(f'Saved: {figures_dir / "wing_acceleration.png"}')
+    plt.close()
+
+
 def plot_param_scans(geo, params, output_dir):
     """参数扫描图"""
     fig, axes = plt.subplots(2, 3, figsize=(18, 11))
@@ -477,7 +554,10 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 ### 图 2：单周期时间域力曲线
 ![力时间曲线](../figures/force_time_domain.png)
 
-### 图 3：参数扫描结果
+### 图 3：翅膀角速度与角加速度
+![翅膀加速度](../figures/wing_acceleration.png)
+
+### 图 4：参数扫描结果
 ![参数扫描](../figures/param_scan.png)
 
 ## 5. 关键假设
@@ -543,25 +623,30 @@ def main():
               f"peak_lift={peak_lift*1000:.1f} mN, peak_drag={peak_drag*1000:.1f} mN")
     
     # Plot force vs phi
-    print("\n[2/4] Generating force vs phi plots...")
+    print("\n[2/5] Generating force vs phi plots...")
     plot_force_vs_phi(front_sim, back_sim, params, OUTPUT_DIR)
     
     # Plot time domain
-    print("\n[3/4] Generating time-domain plots...")
+    print("\n[3/5] Generating time-domain plots...")
     plot_time_domain(front_sim, back_sim, params, OUTPUT_DIR)
     
+    # Plot acceleration
+    print("\n[4/5] Generating wing acceleration plots...")
+    plot_acceleration(front_sim, back_sim, params, OUTPUT_DIR)
+    
     # Param scan
-    print("\n[4/4] Running parameter scans...")
+    print("\n[5/5] Running parameter scans...")
     plot_param_scans(geo, params, OUTPUT_DIR)
     
     # Markdown report
-    print("\n[4/4] Generating Markdown report...")
+    print("\n[5/5] Generating Markdown report...")
     report_path = generate_markdown_report(geo, params, front_sim, back_sim, OUTPUT_DIR)
     
     print("\n" + "=" * 70)
     print("DONE! Generated files:")
     print(f"  - {OUTPUT_DIR / 'figures' / 'force_vs_phi.png'}")
     print(f"  - {OUTPUT_DIR / 'figures' / 'force_time_domain.png'}")
+    print(f"  - {OUTPUT_DIR / 'figures' / 'wing_acceleration.png'}")
     print(f"  - {OUTPUT_DIR / 'figures' / 'param_scan.png'}")
     print(f"  - {report_path}")
     print("=" * 70)
