@@ -31,7 +31,7 @@ AERO_PARAMS = {
     "nu": 1.46e-5,          # 运动粘度 m²/s
     "m_total": 0.025,       # 总质量 25g
     "m_wing_total": 0.004,  # 四翅总质量 4g
-    "f": 17.5,              # 典型频率 Hz (范围 15-20)
+    "f": 15.0,              # 典型频率 Hz (范围 15-20)
     "phi_down_deg": 80.0,   # 下拍最大角度（向下）
     "phi_up_deg": 60.0,     # 上拍最大角度（向上）
     "alpha_deg": 45.0,      # 攻角 °（固定安装角）
@@ -309,17 +309,16 @@ def plot_time_domain(front_sim, back_sim, params, output_dir):
     ax.grid(True, alpha=0.3)
     ax.set_xlim(0, T*1000)
     
-    # Row 1: Lift components
+    # Row 1: Lift components (Rotational = 0 due to fixed AoA, omitted from plot)
     ax = axes[1, 0]
     ax.stackplot(t_ms, 
                  front_sim['F_trans_lift']*1000,
-                 front_sim['F_rot']*1000,
                  front_sim['F_AM']*1000,
-                 labels=['Translational', 'Rotational', 'Added Mass'],
-                 colors=['#4CAF50', '#FF9800', '#2196F3'],
+                 labels=['Translational', 'Added Mass'],
+                 colors=['#4CAF50', '#2196F3'],
                  alpha=0.8)
     ax.set_ylabel('Lift (mN)')
-    ax.set_title('Front Wing - Lift Components')
+    ax.set_title('Front Wing - Lift Components\n(Fixed AoA: Rotational = 0)')
     ax.legend(loc='upper right')
     ax.grid(True, alpha=0.3)
     ax.set_xlim(0, T*1000)
@@ -327,13 +326,12 @@ def plot_time_domain(front_sim, back_sim, params, output_dir):
     ax = axes[1, 1]
     ax.stackplot(t_ms,
                  back_sim['F_trans_lift']*1000,
-                 back_sim['F_rot']*1000,
                  back_sim['F_AM']*1000,
-                 labels=['Translational', 'Rotational', 'Added Mass'],
-                 colors=['#4CAF50', '#FF9800', '#2196F3'],
+                 labels=['Translational', 'Added Mass'],
+                 colors=['#4CAF50', '#2196F3'],
                  alpha=0.8)
     ax.set_ylabel('Lift (mN)')
-    ax.set_title('Back Wing - Lift Components')
+    ax.set_title('Back Wing - Lift Components\n(Fixed AoA: Rotational = 0)')
     ax.legend(loc='upper right')
     ax.grid(True, alpha=0.3)
     ax.set_xlim(0, T*1000)
