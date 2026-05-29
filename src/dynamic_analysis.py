@@ -35,7 +35,7 @@ AERO_PARAMS = {
     "phi_down_deg": 80.0,   # 下拍最大角度（向下）
     "phi_up_deg": 60.0,     # 上拍最大角度（向上）
     "alpha_deg": 45.0,      # 攻角 °（固定安装角）
-    "mech_R": 2.25,         # 机构主点半径（控制运动波形）
+    "mech_a": 8.0,          # 机构主点圆心 x（可调 6-14，控制摆幅）
 }
 
 
@@ -79,7 +79,7 @@ def simulate_cycle(geo_item, params, n_points=2000):
     rho = params['rho']
     phi_down = params.get('phi_down_deg', 80)
     phi_up = params.get('phi_up_deg', 60)
-    mech_R = params.get('mech_R', 2.25)
+    mech_a = params.get('mech_a', 8.0)
 
     S = geo_item['S']
     R = geo_item['R']
@@ -89,7 +89,7 @@ def simulate_cycle(geo_item, params, n_points=2000):
 
     # ========== 机构运动学 ==========
     t, phi, phi_dot, phi_ddot, mech_info = wing_kinematics(
-        f=f, params={'R': mech_R}, n_points=n_points,
+        f=f, params={'a': mech_a}, n_points=n_points,
         phi_down_deg=phi_down, phi_up_deg=phi_up)
 
     # ========== 固定攻角 ==========
@@ -139,6 +139,7 @@ def simulate_cycle(geo_item, params, n_points=2000):
         'F_drag': F_drag,
         'C_L': C_L_arr,
         'C_D': C_D_arr,
+        'mech_span': mech_info['raw_span_deg'],
     }
 
 
@@ -349,7 +350,7 @@ def plot_acceleration(front_sim, back_sim, params, output_dir):
     """绘制翅膀角速度与角加速度（机构运动学）"""
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     fig.suptitle(f'Wing Kinematic Acceleration (f={params["f"]}Hz, '
-                 f'R={params.get("mech_R", 2.25)}, '
+                 f'R=2.25, a={params.get("mech_a", 8.0)}, '
                  f'α={params["alpha_deg"]}°)',
                  fontsize=14, fontweight='bold')
 
@@ -479,45 +480,76 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
     avg_drag_4w = 2 * (np.mean(np.abs(front_sim['F_drag'])) + np.mean(np.abs(back_sim['F_drag']))) * 1000
     peak_lift_4w = 2 * (np.max(np.abs(front_sim['F_lift'])) + np.max(np.abs(back_sim['F_lift']))) * 1000
     peak_drag_4w = 2 * (np.max(np.abs(front_sim['F_drag'])) + np.max(np.abs(back_sim['F_drag']))) * 1000
-    
+
+    # net lift (signed)
+    net_lift_f = np.mean(front_sim['F_lift']) * 1000
+    net_lift_b = np.mean(back_sim['F_lift']) * 1000
+    net_lift_4w = 2 * (net_lift_f + net_lift_b)
+
+    mech_a = params.get('mech_a', 8.0)
+
     md = f"""# 仿生蝴蝶翅膀空气动力学分析报告
 
 > 生成日期: 2026-05-29  
+> 运动学: 前置连杆机构 (mechanism.py)  
 > 分析脚本: dynamic_analysis.py
 
 ---
 
 ## 1. 设计参数
 
+### 1.1 飞行参数
 | 参数 | 数值 | 说明 |
 |------|------|------|
 | 总质量 | 25 g | 机身+翅膀 |
 | 四翅总质量 | 4 g | 单翅 1 g |
-| 扑动频率 | {params['f']} Hz | 典型值，范围 10-25 Hz |
-| 下拍幅度 | {params['phi_down_deg']}° | 向下最大角度 |
-| 上拍幅度 | {params['phi_up_deg']}° | 向上最大角度 |
-| 攻角 | {params['alpha_deg']}° | 固定安装角，无翻转 |
-| 空气密度 | 1.225 kg/m³ | 海平面 |
+| 扑动频率 | {params['f']} Hz | 范围 10-25 Hz |
+| 下拍幅度 | {params['phi_down_deg']}° | 与水平方向夹角（向下） |
+| 上拍幅度 | {params['phi_up_deg']}° | 与水平方向夹角（向上） |
+| 攻角 α | {params['alpha_deg']}° | 固定安装角（刚性连接，无翻转） |
+| 空气密度 | 1.225 kg/m³ | 海平面标准值 |
+
+### 1.2 前置连杆机构参数
+| 参数 | 数值 | 说明 |
+|------|------|------|
+| a | {mech_a} | 主点圆心 x（可调 6-14，控制摆幅） |
+| b | 6.97 | 主点圆心 y（固定） |
+| R | 2.25 | 主点轨迹圆半径（固定） |
+| c | 14 | 直线方程常数（固定） |
+| l | 8 | 固定圆 x²+y²=l² 半径（固定） |
+| 机构摆幅 | {front_sim['mech_span']:.1f}° | 原始机构输出的 ± 范围 |
+| φ̇ 峰值 | {np.max(np.abs(front_sim['phi_dot'])):.1f} rad/s | 角速度峰值 |
+| φ̈ 峰值 | {np.max(np.abs(front_sim['phi_ddot'])):.0f} rad/s² | 角加速度峰值（stroke reversal） |
 
 ## 2. 几何参数（由 DXF 实测）
 
-| 翅膀 | 面积(mm²) | 展长(mm) | 平均弦长(mm) | 展弦比 | r₁ | r₂² |
+| 翅膀 | 面积(mm²) | 展长(mm) | 平均弦长(mm) | 展弦比 | r̂₁ | r̂₂² |
 |------|-----------|----------|--------------|--------|-----|-----|
 | 前翅 Front | {geo['Front']['S_mm2']:.1f} | {geo['Front']['R_mm']:.1f} | {geo['Front']['c_avg']*1000:.1f} | {geo['Front']['AR']:.2f} | {geo['Front']['r1']:.4f} | {geo['Front']['r2_sq']:.4f} |
 | 后翅 Back | {geo['Back']['S_mm2']:.1f} | {geo['Back']['R_mm']:.1f} | {geo['Back']['c_avg']*1000:.1f} | {geo['Back']['AR']:.2f} | {geo['Back']['r1']:.4f} | {geo['Back']['r2_sq']:.4f} |
 
-## 3. 气动力计算结果（四翅总计）
+## 3. 气动力计算结果
 
+### 3.1 四翅总计
 | 项目 | 数值 | 备注 |
 |------|------|------|
 | 重量 | **{weight:.1f} mN** | mg |
-| 时均升力（四翅） | {avg_lift_4w:.1f} mN | 理论估算 |
-| **时均阻力（四翅）** | **{avg_drag_4w:.1f} mN** | **重点指标** |
-| 峰值升力（四翅） | {peak_lift_4w:.1f} mN | 拍动中期 |
-| 峰值阻力（四翅） | {peak_drag_4w:.1f} mN | 拍动中期 |
-| 升重比 | {avg_lift_4w/weight:.1f} | 理论值 |
+| 时均升力 | {avg_lift_4w:.1f} mN | 绝对值平均 |
+| 净升力（符号平均） | {net_lift_4w:.1f} mN | 含上拍负升力抵消 |
+| **时均阻力** | **{avg_drag_4w:.1f} mN** | **重点指标** |
+| 峰值升力 | {peak_lift_4w:.1f} mN | AM+trans 综合峰值 |
+| 峰值阻力 | {peak_drag_4w:.1f} mN | 拍动中期 |
+| 时均升重比 | {avg_lift_4w/weight:.1f} | 绝对值平均 / 重量 |
+| 净升重比 | {net_lift_4w/weight:.1f} | 净升力 / 重量 |
 
-> **注**：以上力值基于准定常模型估算。实际飞行中，三维效应、涡脱落、翅膀柔性变形等因素会使真实力降低 30-50%。
+### 3.2 单翅明细
+| 翅膀 | 时均升力(mN) | 净升力(mN) | 时均阻力(mN) | 峰值升力(mN) |
+|------|-------------|-----------|-------------|-------------|
+| Front | {np.mean(np.abs(front_sim['F_lift']))*1000:.1f} | {net_lift_f:.1f} | {np.mean(np.abs(front_sim['F_drag']))*1000:.1f} | {np.max(np.abs(front_sim['F_lift']))*1000:.1f} |
+| Back | {np.mean(np.abs(back_sim['F_lift']))*1000:.1f} | {net_lift_b:.1f} | {np.mean(np.abs(back_sim['F_drag']))*1000:.1f} | {np.max(np.abs(back_sim['F_lift']))*1000:.1f} |
+
+> **注**：准定常模型理论估算。实际飞行中三维效应、涡脱落、翅膀柔性变形使真实力降低 30-50%。
+> 机构运动学含天然急回特性，角加速度峰值高于正弦假设。
 
 ## 4. 图表
 
@@ -533,34 +565,48 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 ### 图 4：参数扫描结果
 ![参数扫描](../figures/param_scan.png)
 
+### 图 5：安装角 α 扫描（净升力/阻力/升阻比）
+![安装角扫描](../figures/alpha_scan.png)
+
+### 图 6：机构运动学（轨迹、a 扫描、span vs a）
+![机构运动学](../figures/mechanism_analysis.png)
+
+### 图 7：安装角 α 扫描（净升力/阻力/升阻比）
+![安装角扫描](../figures/alpha_scan.png)
+
+## 6. α 扫描结果
+| α | 净升力(mN) | 阻力(mN) | L/D | vs 重量 | 评价 |
+|---|-----------|----------|-----|---------|------|
+| 17° | 286 | 1,391 | **0.206** | 1.2x | 最佳效率（但升力低） |
+| 35° | 564 | 3,009 | 0.187 | 2.3x | 安全 |
+| **45°** | **719** | 4,140 | 0.174 | **2.9x** | **当前设计** |
+| 55° | 848 | 5,262 | 0.161 | 3.5x | |
+| 75° | **960** | 6,934 | 0.138 | **3.9x** | 最大净升力 |
+| 85° | 927 | 7,274 | 0.127 | 3.8x | 阻力过大，效率降 |
+
 ## 5. 关键假设
 
 1. 几何数据来源于 SolidWorks DXF 导出（草图局部坐标）。
-2. **运动学由前置连杆机构生成**（mechanism.py，曲柄摇杆机构，R={params.get('mech_R', 2.25)}）。
+2. **运动学由前置连杆机构生成**（mechanism.py，a={mech_a}，b=6.97，R=2.25，c=14，l=8）。曲柄一周 = 翅膀一拍。
 3. 准定常模型：平动力基于瞬时速度（Dickinson/Sane 2002 分解）。
-4. 固定攻角模型：翅膀安装角 α = {params['alpha_deg']}° 不变（机械结构刚性连接），无主动翻转，旋转力为零。
-5. 上拍升力方向反转：C_L 基于 φ̇ 方向取 ±α 时的值，平动升力向下（负升力）。
-6. 附加质量力：F_AM = -(ρπc²/4)·φ̈·R·r̂₁·sin(α)，阻力加速度。
+4. 固定攻角：α = {params['alpha_deg']}°（刚性连接），α̇=0，旋转力=0。
+5. C_L 基于 φ̇ 方向：φ̇≤0 → C_L(+α)；φ̇>0 → C_L(-α)。
+6. F_AM = -(ρπc²/4)·φ̈·R·r̂₁·sin(α)，阻力加速度。
 7. 未考虑翅膀柔性变形、三维展向流动、涡干扰等效应。
 
 ---
 
-## 附录：SolidWorks 轴线 DXF 重新导出步骤
+## 附录：SolidWorks 轴线 DXF 导出步骤
 
-若需修正轴线位置（当前轴线端点为 `(-13.39, -84.95)` 和 `(41.55, 44.73)`）：
+当前轴线端点：`(-13.39, -84.95)` 和 `(41.55, 44.73)`，长度 140.84 mm。
 
 1. 打开 `Wings.SLDPRT`
-2. 在特征树中找到 **草图102**（Axis/hinge line）
-3. 右键草图102 → **编辑草图**
-4. 确认草图中只有两个圆（表示轴线端点），无其他构造线
-5. 如需调整：删除现有圆，在翅膀根部重新绘制两个圆（直径约 5mm）
-6. 文件 → 另存为 → 选择格式 **DXF (*.dxf)**
-7. 在 DXF 选项中：
-   - 版本：R2000 或更高
-   - **仅输出激活草图**（关键！）
-   - 坐标系：草图坐标
-8. 保存为 `WingsAxis.DXF`，覆盖原文件
-9. 重新运行 `python analyze_dxf.py` 和 `python dynamic_analysis.py`
+2. 特征树 → **草图102**（Axis/hinge line）→ 编辑草图
+3. 确认只有两个圆（轴线端点），无构造线
+4. 文件 → 另存为 → **DXF (*.dxf)**，版本 R2000+
+5. 选项：**仅输出激活草图**，坐标系：草图坐标
+6. 保存为 `WingsAxis.DXF`，覆盖原文件
+7. 重新运行 `python analyze_dxf.py` 和 `python dynamic_analysis.py`
 """
     
     reports_dir = output_dir / 'reports'
