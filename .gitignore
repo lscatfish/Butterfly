@@ -1,43 +1,24 @@
-# SolidWorks temp/lock files
+# SolidWorks temp files
 ~$*
+*.swp
 *.sldprt.bak
-*.sldasm.bak
-*.slddrw.bak
-*.tmp
 
-# Python
+# Python cache
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-.venv/
-pip-log.txt
-pip-delete-this-directory.txt
+*.pyc
+*.pyo
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
 
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
+# Generated outputs (ignored by default)
+/output/figures/*.png
+/output/tables/*.csv
+/output/reports/*.md
 
-# Jupyter
-.ipynb_checkpoints/
-
-# Generated outputs (reproducible from Python scripts)
-*.png
-*.json
-*.csv
-
-# Build/dist
-build/
-dist/
-*.egg-info/
+# Keep directory structure
+!/output/
+!/output/figures/
+!/output/tables/
+!/output/reports/

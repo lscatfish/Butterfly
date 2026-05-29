@@ -16,7 +16,9 @@ import json
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
-DATA_DIR = Path(__file__).parent
+PROJECT_ROOT = Path(__file__).parent.parent
+DATA_DIR = PROJECT_ROOT / 'data'
+OUTPUT_DIR = PROJECT_ROOT / 'output'
 MM_TO_M = 1e-3
 
 # ==================== 用户设计参数 ====================
@@ -606,12 +608,13 @@ def main():
                             for kk, vv in v.items()}
                         for k, v in aero.items()},
     }
+    # 保存 JSON 到 data/
     json_path = DATA_DIR / 'wing_analysis_results.json'
     with open(json_path, 'w') as f:
         json.dump(save_data, f, indent=2)
     print(f"\nSaved JSON: {json_path}")
     
-    # 保存弦长分布
+    # 保存弦长分布到 output/tables/
     if front_prop and back_prop:
         chord_df = pd.DataFrame({
             'y_hat': front_prop['y_hat'],
@@ -621,10 +624,15 @@ def main():
             'chord_front_mm': front_prop['chords_mm'],
             'chord_back_mm': np.interp(front_prop['y_centers_mm'], back_prop['y_centers_mm'], back_prop['chords_mm'], left=0, right=0),
         })
-        chord_df.to_csv(DATA_DIR / 'chord_distribution.csv', index=False)
-        print(f"Saved chord_distribution.csv")
+        tables_dir = OUTPUT_DIR / 'tables'
+        tables_dir.mkdir(parents=True, exist_ok=True)
+        chord_df.to_csv(tables_dir / 'chord_distribution.csv', index=False)
+        print(f"Saved output/tables/chord_distribution.csv")
     
-    plot_results(axis, front_prop, back_prop, DATA_DIR)
+    # 保存图表到 output/figures/
+    figures_dir = OUTPUT_DIR / 'figures'
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    plot_results(axis, front_prop, back_prop, figures_dir)
     print("\nDone!")
 
 

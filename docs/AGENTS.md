@@ -8,15 +8,31 @@
 
 ## File Structure
 ```
-Wings.SLDPRT          SolidWorks 零件（含草图 100/101/102）
-WingFront.DXF         前翅草图（SPLINE×3 + LINE×1）
-WingBack.DXF          后翅草图（SPLINE×1 + LINE×1）
-WingsAxis.DXF         转轴草图（CIRCLE×2，定义 hinge line）
-analyze_dxf.py        主分析脚本（几何 + 气动力）
-plot_wings.py         简单绘图脚本
-wing_analysis.png     输出：几何与弦长分布图
-wing_analysis_results.json  输出：全部计算结果
-chord_distribution.csv      输出：弦长分布数据
+├── cad/                          SolidWorks 文件
+│   └── Wings.SLDPRT              零件（含草图 100/101/102）
+├── data/                         原始数据 + 分析结果
+│   ├── WingFront.DXF             前翅草图（SPLINE×3 + LINE×1）
+│   ├── WingBack.DXF              后翅草图（SPLINE×1 + LINE×1）
+│   ├── WingsAxis.DXF             转轴草图（CIRCLE×2，定义 hinge line）
+│   └── wing_analysis_results.json 几何参数与静态估算结果
+├── src/                          Python 分析脚本
+│   ├── analyze_dxf.py            主分析脚本（几何提取 + 静态气动力）
+│   ├── dynamic_analysis.py       动态分析脚本（时域仿真 + 参数扫描）
+│   └── plot_wings.py             简单绘图脚本（已废弃，保留参考）
+├── output/                       生成的输出文件
+│   ├── figures/                  图表（PNG）
+│   │   ├── wing_analysis.png     几何与弦长分布
+│   │   ├── force_vs_phi.png      力随转角变化（向上为正）
+│   │   ├── force_time_domain.png 时间域力曲线
+│   │   └── param_scan.png        参数扫描结果
+│   ├── tables/                   数据表（CSV）
+│   │   └── chord_distribution.csv 弦长分布
+│   └── reports/                  报告（Markdown）
+│       └── 气动分析报告.md
+├── docs/                         文档
+│   ├── AGENTS.md                 本文件
+│   └── 仿生蝴蝶翅膀空气动力学分析文献综述.md
+└── .gitignore
 ```
 
 ## Critical Pitfall: DXF Export Only

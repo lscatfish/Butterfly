@@ -17,7 +17,9 @@ import json
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
-DATA_DIR = Path(__file__).parent
+PROJECT_ROOT = Path(__file__).parent.parent
+DATA_DIR = PROJECT_ROOT / 'data'
+OUTPUT_DIR = PROJECT_ROOT / 'output'
 MM_TO_M = 1e-3
 
 # ==================== 用户设计参数 ====================
@@ -270,8 +272,10 @@ def plot_force_vs_phi(front_sim, back_sim, params, output_dir):
     ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig(output_dir / 'force_vs_phi.png', dpi=200, bbox_inches='tight')
-    print(f'Saved: {output_dir / "force_vs_phi.png"}')
+    figures_dir = output_dir / 'figures'
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(figures_dir / 'force_vs_phi.png', dpi=200, bbox_inches='tight')
+    print(f'Saved: {figures_dir / "force_vs_phi.png"}')
     plt.close()
 
 
@@ -363,8 +367,10 @@ def plot_time_domain(front_sim, back_sim, params, output_dir):
     ax.set_xlim(0, T*1000)
     
     plt.tight_layout()
-    plt.savefig(output_dir / 'force_time_domain.png', dpi=200, bbox_inches='tight')
-    print(f'Saved: {output_dir / "force_time_domain.png"}')
+    figures_dir = output_dir / 'figures'
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(figures_dir / 'force_time_domain.png', dpi=200, bbox_inches='tight')
+    print(f'Saved: {figures_dir / "force_time_domain.png"}')
     plt.close()
 
 
@@ -412,8 +418,10 @@ def plot_param_scans(geo, params, output_dir):
         ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig(output_dir / 'param_scan.png', dpi=200, bbox_inches='tight')
-    print(f'Saved: {output_dir / "param_scan.png"}')
+    figures_dir = output_dir / 'figures'
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(figures_dir / 'param_scan.png', dpi=200, bbox_inches='tight')
+    print(f'Saved: {figures_dir / "param_scan.png"}')
     plt.close()
 
 
@@ -467,13 +475,13 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 ## 4. 图表
 
 ### 图 1：力随翅膀转角 φ 的变化（向上为正，向下为负）
-![力转角曲线](force_vs_phi.png)
+![力转角曲线](../figures/force_vs_phi.png)
 
 ### 图 2：单周期时间域力曲线
-![力时间曲线](force_time_domain.png)
+![力时间曲线](../figures/force_time_domain.png)
 
 ### 图 3：参数扫描结果
-![参数扫描](param_scan.png)
+![参数扫描](../figures/param_scan.png)
 
 ## 5. 关键假设
 
@@ -504,7 +512,9 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 9. 重新运行 `python analyze_dxf.py` 和 `python dynamic_analysis.py`
 """
     
-    report_path = output_dir / '气动分析报告.md'
+    reports_dir = output_dir / 'reports'
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    report_path = reports_dir / '气动分析报告.md'
     with open(report_path, 'w', encoding='utf-8') as f:
         f.write(md)
     print(f'Saved Markdown report: {report_path}')
@@ -537,24 +547,25 @@ def main():
     
     # Plot force vs phi
     print("\n[2/4] Generating force vs phi plots...")
-    plot_force_vs_phi(front_sim, back_sim, params, DATA_DIR)
+    plot_force_vs_phi(front_sim, back_sim, params, OUTPUT_DIR)
     
     # Plot time domain
     print("\n[3/4] Generating time-domain plots...")
-    plot_time_domain(front_sim, back_sim, params, DATA_DIR)
+    plot_time_domain(front_sim, back_sim, params, OUTPUT_DIR)
     
     # Param scan
     print("\n[4/4] Running parameter scans...")
-    plot_param_scans(geo, params, DATA_DIR)
+    plot_param_scans(geo, params, OUTPUT_DIR)
     
     # Markdown report
     print("\n[4/4] Generating Markdown report...")
-    report_path = generate_markdown_report(geo, params, front_sim, back_sim, DATA_DIR)
+    report_path = generate_markdown_report(geo, params, front_sim, back_sim, OUTPUT_DIR)
     
     print("\n" + "=" * 70)
     print("DONE! Generated files:")
-    print(f"  - {DATA_DIR / 'force_time_domain.png'}")
-    print(f"  - {DATA_DIR / 'param_scan.png'}")
+    print(f"  - {OUTPUT_DIR / 'figures' / 'force_vs_phi.png'}")
+    print(f"  - {OUTPUT_DIR / 'figures' / 'force_time_domain.png'}")
+    print(f"  - {OUTPUT_DIR / 'figures' / 'param_scan.png'}")
     print(f"  - {report_path}")
     print("=" * 70)
 
