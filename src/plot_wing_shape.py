@@ -32,27 +32,42 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from analyze_dxf import parse_dxf, connect_entities, read_axis_from_dxf
 
 
-def rotate_points(pts, center, angle_deg):
-    """将点集绕 center 旋转 angle_deg 度（逆时针为正）"""
-    angle = np.deg2rad(angle_deg)
-    cos_a, sin_a = np.cos(angle), np.sin(angle)
-    R = np.array([[cos_a, -sin_a], [sin_a, cos_a]])
-    return (pts - center) @ R.T + center
+def rotate_around_axis(pts, axis, phi_deg):
+    """
+    将点集绕 hinge line（三维旋转）后取 XY 平面投影。
+
+    hinge line 由轴中点 c 和方向 unit_dir 定义。
+    对于点 P：
+      v = P - c
+      v_parallel = (v · unit_dir) * unit_dir    (沿轴，不变)
+      v_perp     = v - v_parallel               (垂直于轴)
+    绕轴旋转 phi 后，XY 投影中 v_perp 被压缩 cos(phi) 倍：
+      P' = c + v_parallel + v_perp * cos(phi)
+    """
+    c = (axis["p0"] + axis["p1"]) / 2.0
+    unit_dir = axis["unit_dir"]
+    phi = np.deg2rad(phi_deg)
+    cos_p = np.cos(phi)
+
+    v = pts - c
+    v_dot_dir = v @ unit_dir
+    v_parallel = np.outer(v_dot_dir, unit_dir)
+    v_perp = v - v_parallel
+
+    return c + v_parallel + v_perp * cos_p
 
 
 def plot_single_pose(axis, front_pts, back_pts, phi=0.0, ax=None,
                      front_color="blue", back_color="green", axis_color="red",
                      alpha=0.35, lw=1.5, label_prefix=""):
-    """在指定 ax 上绘制轴和翅膀（单姿态），返回 ax"""
+    """在指定 ax 上绘制轴和翅膀（单姿态，三维旋转投影），返回 ax"""
     import matplotlib.pyplot as plt
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 8))
 
-    center = axis["p0"]
-
     if phi != 0:
-        front_pts_rot = rotate_points(front_pts, center, phi)
-        back_pts_rot = rotate_points(back_pts, center, phi)
+        front_pts_rot = rotate_around_axis(front_pts, axis, phi)
+        back_pts_rot = rotate_around_axis(back_pts, axis, phi)
     else:
         front_pts_rot = front_pts
         back_pts_rot = back_pts
