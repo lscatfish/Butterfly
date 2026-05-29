@@ -21,13 +21,20 @@
 │   ├── mechanism.py              前置机构运动学模块（crank-rocker → φ(t)）
 │   ├── dynamic_analysis.py       动态气动力分析（机构运动学 + 参数扫描）
 │   ├── alpha_scan.py             安装角扫描（净升力/阻力/升阻比 vs α）
-│   └── mechanism_plot.py         机构可视化（轨迹 + R 扫描，替代旧 analyze/plot 两个脚本）
+│   ├── mechanism_plot.py         机构可视化（轨迹 + R 扫描）
+│   └── plot_wing_shape.py        翅膀与转轴平面形状绘制（DXF → 可视化）
 ├── output/                       生成的输出文件
 │   ├── figures/                  图表（PNG）
-│   │   ├── wing_analysis.png     几何与弦长分布
-│   │   ├── force_vs_phi.png      力随转角变化（向上为正）
-│   │   ├── force_time_domain.png 时间域力曲线
-│   │   └── param_scan.png        参数扫描结果
+│   │   ├── wing_analysis.png     几何与弦长分布（analyze_dxf.py）
+│   │   ├── wing_shape.png        翅膀与转轴平面形状（plot_wing_shape.py）
+│   │   ├── force_vs_phi.png      力随转角变化（dynamic_analysis.py）
+│   │   ├── force_time_domain.png 时间域力曲线（dynamic_analysis.py）
+│   │   ├── wing_acceleration.png 角速度/角加速度（dynamic_analysis.py）
+│   │   ├── param_scan.png        参数扫描（dynamic_analysis.py）
+│   │   ├── alpha_scan.png        安装角扫描（alpha_scan.py）
+│   │   ├── mechanism_kinematics.png 机构运动学轨迹（mechanism_plot.py）
+│   │   ├── phi_t_various_R.png   不同R的phi-t曲线（mechanism_plot.py）
+│   │   └── phi_t_comparison.png  phi-t叠加对比（mechanism_plot.py）
 │   ├── tables/                   数据表（CSV）
 │   │   └── chord_distribution.csv 弦长分布
 │   └── reports/                  报告（Markdown）
