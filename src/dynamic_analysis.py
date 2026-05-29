@@ -142,9 +142,13 @@ def simulate_cycle(geo_item, params, n_points=2000):
     # 旋转力 = 0（因为 alpha_dot = 0，翅膀不能扭转）
     F_rot = np.zeros_like(t)
     
-    # 附加质量力（方向由 phi_ddot 和 sin(alpha0) 共同决定）
-    # sin(alpha0) = sin(+45°) = +0.707 始终为正
-    F_AM = (rho * np.pi * c_avg**2 / 4.0) * phi_ddot * R * r1 * np.sin(alpha0)
+    # Dickinson附加质量力: F_AM = (ρπc²/4) * (u·u̇)/|u| * sin(α)
+    # (u·u̇)/|u| = sign(φ̇) * φ̈ * R  for φ̇ ≠ 0
+    # At φ̇ = 0 (stroke reversal): limit = -φ̈ * R (opposes acceleration)
+    safe_factor = np.where(np.abs(phi_dot) > 1e-6,
+                           np.sign(phi_dot) * phi_ddot,
+                           -phi_ddot)
+    F_AM = (rho * np.pi * c_avg**2 / 4.0) * safe_factor * R * r1 * np.sin(alpha0)
     
     # 总力
     F_lift = F_trans_lift + F_rot + F_AM
@@ -563,10 +567,10 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 ## 5. 关键假设
 
 1. 几何数据来源于 SolidWorks DXF 导出（草图局部坐标），已废弃早期的 VBA 全局坐标 CSV。
-2. 准定常模型：平动力基于瞬时速度，旋转力基于攻角变化率。
-3. 攻角在 stroke reversal 处平滑翻转（过渡区占周期 {params['flip_ratio']*100:.0f}%）。
-4. 旋转力系数 C_r = {params['C_r']}，取自 Dickinson 文献范围 1.0-2.0。
-5. 附加质量力采用二维薄翼近似。
+2. 准定常模型：平动力基于瞬时速度（Dickinson/Sane 2002 分解）。
+3. 固定攻角模型：翅膀安装角 α = {params['alpha_deg']}° 不变（机械结构刚性连接），无主动翻转，旋转力为零。
+4. 上拍升力方向反转：C_L 取反号，平动升力向下（负升力）。
+5. 附加质量力采用 Dickinson 公式（含 sign(φ̇) 因子），二维薄翼近似。
 6. 未考虑翅膀柔性变形、三维展向流动、涡干扰等效应。
 
 ---

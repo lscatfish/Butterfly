@@ -336,8 +336,8 @@ def aerodynamic_estimate(props, params):
         # F_AM = (ρ π c² / 4) φ̈ R r̂₁ sinα
         F_AM = (rho * np.pi * c_avg**2 / 4.0) * phi_ddot_max * R * r1 * np.sin(alpha_rad)
         
-        # 5. 总峰值力（平动主导，旋转力=0）
-        F_peak_total = F_trans_lift + abs(F_AM)
+        # 5. 总峰值力（平动峰值和AM峰值不同时出现，取较大者）
+        F_peak_total = max(F_trans_lift, abs(F_AM))
         
         # ====== 时间平均力 ======
         # 平动力：cos² 平均 = 1/2

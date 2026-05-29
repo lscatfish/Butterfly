@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+"""
+DEPRECATED: 此脚本使用旧版 VBA 导出的全局坐标 CSV（wing_front.csv 等），
+这些文件已被重命名为 *_old。当前分析已切换为 DXF 方案（analyze_dxf.py）。
+此脚本仅保留作为早期开发参考，无法直接运行。
+"""
 import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
