@@ -124,6 +124,26 @@ def simulate_cycle(geo_item, params, n_points=2000):
     F_lift = F_trans_lift + F_rot + F_AM
     F_drag = np.abs(F_trans_drag)  # 阻力始终为正（与运动方向相反）
     
+    # ========== 功率计算 ==========
+    # 单翅质量（四翅均分）
+    m_wing_total = params.get('m_wing_total', 0.004)
+    m_w = m_wing_total / 4.0
+    
+    # 转动惯量（绕转轴，基于 r2_sq）
+    I_w = m_w * R**2 * r2_sq
+    
+    # 气动功率：克服空气阻力的功率 = 阻力矩 × 角速度
+    # 阻力分布在整个翼面，等效力臂 ≈ R × r1（一阶矩位置）
+    # P_aero = F_drag × |φ̇| × R × r1
+    P_aero = F_drag * np.abs(phi_dot) * R * r1
+    
+    # 惯性功率：加速/减速翅膀的功率 = 惯性力矩 × 角速度
+    # P_inertial = I_w × φ̈ × φ̇
+    P_inertial = I_w * phi_ddot * phi_dot
+    
+    # 总功率
+    P_total = P_aero + P_inertial
+    
     return {
         't': t,
         'phi_deg': np.degrees(phi),
@@ -139,6 +159,11 @@ def simulate_cycle(geo_item, params, n_points=2000):
         'F_drag': F_drag,
         'C_L': C_L_arr,
         'C_D': C_D_arr,
+        'P_aero': P_aero,
+        'P_inertial': P_inertial,
+        'P_total': P_total,
+        'I_w': I_w,
+        'm_w': m_w,
         'mech_span': mech_info['raw_span_deg'],
     }
 
@@ -422,6 +447,107 @@ def plot_acceleration(front_sim, back_sim, params, output_dir):
     plt.close()
 
 
+def plot_power_time_domain(front_sim, back_sim, params, output_dir):
+    """绘制功率时间域曲线（气动 + 惯性 + 总功率）"""
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle(f'Butterfly Wing Power Requirements (f={params["f"]}Hz, α={params["alpha_deg"]}°)\n'
+                 f'P_aero = F_drag × |φ̇| × R × r̂₁    |    P_inertial = I_w × φ̈ × φ̇',
+                 fontsize=14, fontweight='bold')
+    
+    t = front_sim['t']
+    T = t[-1]
+    t_ms = t * 1000
+    
+    colors = {'front': '#1f77b4', 'back': '#2ca02c'}
+    
+    # ---- 左上：单翅功率分解（Front） ----
+    ax = axes[0, 0]
+    ax.fill_between(t_ms, 0, front_sim['P_aero']*1000, alpha=0.3, color='#f44336', label='Aerodynamic')
+    ax.fill_between(t_ms, 0, front_sim['P_inertial']*1000, alpha=0.3, color='#2196F3', label='Inertial')
+    ax.plot(t_ms, front_sim['P_aero']*1000, '-', color='#f44336', lw=2, label='_nolegend_')
+    ax.plot(t_ms, front_sim['P_inertial']*1000, '-', color='#2196F3', lw=2, label='_nolegend_')
+    ax.plot(t_ms, front_sim['P_total']*1000, 'k-', lw=2.5, label='Total')
+    ax.axhline(y=0, color='k', linestyle='-', lw=0.5)
+    ax.set_ylabel('Power (mW)')
+    ax.set_xlabel('Time (ms)')
+    ax.set_title('Front Wing - Power Components')
+    ax.legend(loc='upper right')
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(0, T*1000)
+    
+    # ---- 右上：单翅功率分解（Back） ----
+    ax = axes[0, 1]
+    ax.fill_between(t_ms, 0, back_sim['P_aero']*1000, alpha=0.3, color='#f44336')
+    ax.fill_between(t_ms, 0, back_sim['P_inertial']*1000, alpha=0.3, color='#2196F3')
+    ax.plot(t_ms, back_sim['P_aero']*1000, '-', color='#f44336', lw=2)
+    ax.plot(t_ms, back_sim['P_inertial']*1000, '-', color='#2196F3', lw=2)
+    ax.plot(t_ms, back_sim['P_total']*1000, 'k-', lw=2.5, label='Total')
+    ax.axhline(y=0, color='k', linestyle='-', lw=0.5)
+    ax.set_ylabel('Power (mW)')
+    ax.set_xlabel('Time (ms)')
+    ax.set_title('Back Wing - Power Components')
+    ax.legend(loc='upper right')
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(0, T*1000)
+    
+    # ---- 左下：四翅总功率 ----
+    P_aero_4w = 2 * (front_sim['P_aero'] + back_sim['P_aero'])
+    P_inertial_4w = 2 * (front_sim['P_inertial'] + back_sim['P_inertial'])
+    P_total_4w = P_aero_4w + P_inertial_4w
+    
+    ax = axes[1, 0]
+    ax.fill_between(t_ms, 0, P_aero_4w*1000, alpha=0.3, color='#f44336', label='Aerodynamic (4w)')
+    ax.fill_between(t_ms, 0, P_inertial_4w*1000, alpha=0.3, color='#2196F3', label='Inertial (4w)')
+    ax.plot(t_ms, P_aero_4w*1000, '-', color='#f44336', lw=2)
+    ax.plot(t_ms, P_inertial_4w*1000, '-', color='#2196F3', lw=2)
+    ax.plot(t_ms, P_total_4w*1000, 'k-', lw=2.5, label='Total (4w)')
+    ax.axhline(y=0, color='k', linestyle='-', lw=0.5)
+    # 标注峰值
+    peak_total_idx = np.argmax(np.abs(P_total_4w))
+    ax.annotate(f'peak={P_total_4w[peak_total_idx]*1000:.1f} mW',
+                xy=(t_ms[peak_total_idx], P_total_4w[peak_total_idx]*1000),
+                xytext=(t_ms[peak_total_idx]+5, P_total_4w[peak_total_idx]*1000*0.8),
+                fontsize=9, color='black',
+                arrowprops=dict(arrowstyle='->', color='black', lw=1))
+    ax.set_ylabel('Power (mW)')
+    ax.set_xlabel('Time (ms)')
+    ax.set_title('Total Power (4 Wings)')
+    ax.legend(loc='upper right')
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(0, T*1000)
+    
+    # ---- 右下：功率统计柱状图 ----
+    ax = axes[1, 1]
+    
+    # 计算统计值
+    stats = {
+        'Front Aero': np.mean(front_sim['P_aero'])*1000,
+        'Front Inertial': np.mean(np.abs(front_sim['P_inertial']))*1000,
+        'Back Aero': np.mean(back_sim['P_aero'])*1000,
+        'Back Inertial': np.mean(np.abs(back_sim['P_inertial']))*1000,
+    }
+    
+    colors_bar = ['#f44336', '#2196F3', '#f44336', '#2196F3']
+    bars = ax.bar(range(len(stats)), list(stats.values()), color=colors_bar, alpha=0.7, edgecolor='black')
+    ax.set_xticks(range(len(stats)))
+    ax.set_xticklabels(list(stats.keys()), rotation=15, ha='right')
+    ax.set_ylabel('Avg / Mean Abs Power (mW)')
+    ax.set_title('Power Summary per Wing')
+    ax.grid(True, alpha=0.3, axis='y')
+    
+    # 标注数值
+    for bar, val in zip(bars, stats.values()):
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(stats.values())*0.01,
+                f'{val:.1f}', ha='center', va='bottom', fontsize=9)
+    
+    plt.tight_layout()
+    figures_dir = output_dir / 'figures'
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(figures_dir / 'power_time_domain.png', dpi=200, bbox_inches='tight')
+    print(f'Saved: {figures_dir / "power_time_domain.png"}')
+    plt.close()
+
+
 def plot_param_scans(geo, params, output_dir):
     """参数扫描图"""
     fig, axes = plt.subplots(2, 3, figsize=(18, 11))
@@ -485,6 +611,23 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
     net_lift_f = np.mean(front_sim['F_lift']) * 1000
     net_lift_b = np.mean(back_sim['F_lift']) * 1000
     net_lift_4w = 2 * (net_lift_f + net_lift_b)
+
+    # 功率统计
+    avg_aero_power_4w = 2 * (np.mean(front_sim['P_aero']) + np.mean(back_sim['P_aero'])) * 1000
+    peak_aero_power_4w = 2 * np.max(np.array([np.max(front_sim['P_aero']), np.max(back_sim['P_aero'])])) * 1000
+    avg_inertial_power_4w = 2 * (np.mean(np.abs(front_sim['P_inertial'])) + np.mean(np.abs(back_sim['P_inertial']))) * 1000
+    peak_inertial_power_4w = 2 * np.max(np.array([np.max(np.abs(front_sim['P_inertial'])), np.max(np.abs(back_sim['P_inertial']))])) * 1000
+    peak_total_power_4w = 2 * np.max(np.array([np.max(np.abs(front_sim['P_total'])), np.max(np.abs(back_sim['P_total']))])) * 1000
+    
+    # 单翅功率
+    front_avg_aero = np.mean(front_sim['P_aero']) * 1000
+    front_peak_aero = np.max(front_sim['P_aero']) * 1000
+    front_avg_inertial = np.mean(np.abs(front_sim['P_inertial'])) * 1000
+    front_peak_inertial = np.max(np.abs(front_sim['P_inertial'])) * 1000
+    back_avg_aero = np.mean(back_sim['P_aero']) * 1000
+    back_peak_aero = np.max(back_sim['P_aero']) * 1000
+    back_avg_inertial = np.mean(np.abs(back_sim['P_inertial'])) * 1000
+    back_peak_inertial = np.max(np.abs(back_sim['P_inertial'])) * 1000
 
     mech_a = params.get('mech_a', 8.0)
 
@@ -551,7 +694,36 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 > **注**：准定常模型理论估算。实际飞行中三维效应、涡脱落、翅膀柔性变形使真实力降低 30-50%。
 > 机构运动学含天然急回特性，角加速度峰值高于正弦假设。
 
-## 4. 图表
+## 4. 功率需求分析
+
+### 4.1 功率计算公式
+- **气动功率**：`P_aero = F_drag × |φ̇| × R × r̂₁` — 克服空气阻力的功率
+- **惯性功率**：`P_inertial = I_w × φ̈ × φ̇` — 加速/减速翅膀的功率（周期平均≈0）
+- **转动惯量**：`I_w = m_w × R² × r̂₂²`，单翅 `m_w = 1 g`
+
+### 4.2 四翅总功率
+| 项目 | 数值 | 说明 |
+|------|------|------|
+| 时均气动功率 | **{avg_aero_power_4w:.1f} mW** | 克服空气阻力 |
+| 峰值气动功率 | **{peak_aero_power_4w:.1f} mW** | 拍动中期 |
+| 平均惯性功率（绝对值）| {avg_inertial_power_4w:.1f} mW | 加速减速翅膀 |
+| 峰值惯性功率 | **{peak_inertial_power_4w:.1f} mW** | stroke reversal |
+| **峰值总功率** | **{peak_total_power_4w:.1f} mW** | **电机需提供的最大功率** |
+| 时均总功率 | {avg_aero_power_4w:.1f} mW | 惯性功率周期平均≈0 |
+
+### 4.3 单翅功率明细
+| 翅膀 | 时均气动(mW) | 峰值气动(mW) | 平均惯性(mW) | 峰值惯性(mW) |
+|------|-------------|-------------|-------------|-------------|
+| Front | {front_avg_aero:.1f} | {front_peak_aero:.1f} | {front_avg_inertial:.1f} | {front_peak_inertial:.1f} |
+| Back | {back_avg_aero:.1f} | {back_peak_aero:.1f} | {back_avg_inertial:.1f} | {back_peak_inertial:.1f} |
+
+> **功率评估**：
+> - 时均气动功率 **{avg_aero_power_4w:.1f} mW** 是持续悬停的主要能耗
+> - 峰值总功率 **{peak_total_power_4w:.1f} mW** 决定电机和减速器的选型要求
+> - 惯性功率在 stroke reversal 达到峰值，与角加速度同步
+> - 若考虑三维效应和涡脱落损失，实际功率需求可能增加 30-50%
+
+## 5. 图表
 
 ### 图 1：力随翅膀转角 φ 的变化（向上为正，向下为负）
 ![力转角曲线](../figures/force_vs_phi.png)
@@ -562,19 +734,22 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 ### 图 3：翅膀角速度与角加速度
 ![翅膀加速度](../figures/wing_acceleration.png)
 
-### 图 4：参数扫描结果
+### 图 4：功率时间域曲线
+![功率曲线](../figures/power_time_domain.png)
+
+### 图 5：参数扫描结果
 ![参数扫描](../figures/param_scan.png)
 
-### 图 5：安装角 α 扫描（净升力/阻力/升阻比）
+### 图 6：安装角 α 扫描（净升力/阻力/升阻比）
 ![安装角扫描](../figures/alpha_scan.png)
 
-### 图 6：机构运动学（轨迹、a 扫描、span vs a）
+### 图 7：机构运动学（轨迹、a 扫描、span vs a）
 ![机构运动学](../figures/mechanism_analysis.png)
 
-### 图 7：安装角 α 扫描（净升力/阻力/升阻比）
+### 图 8：安装角 α 扫描（净升力/阻力/升阻比）
 ![安装角扫描](../figures/alpha_scan.png)
 
-## 6. α 扫描结果
+## 7. α 扫描结果
 | α | 净升力(mN) | 阻力(mN) | L/D | vs 重量 | 评价 |
 |---|-----------|----------|-----|---------|------|
 | 17° | 286 | 1,391 | **0.206** | 1.2x | 最佳效率（但升力低） |
@@ -584,7 +759,7 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 | 75° | **960** | 6,934 | 0.138 | **3.9x** | 最大净升力 |
 | 85° | 927 | 7,274 | 0.127 | 3.8x | 阻力过大，效率降 |
 
-## 5. 关键假设
+## 8. 关键假设
 
 1. 几何数据来源于 SolidWorks DXF 导出（草图局部坐标）。
 2. **运动学由前置连杆机构生成**（mechanism.py，a={mech_a}，b=6.97，R=2.25，c=14，l=8）。曲柄一周 = 翅膀一拍。
@@ -639,27 +814,38 @@ def main():
         avg_drag = np.mean(np.abs(sim['F_drag']))
         peak_lift = np.max(np.abs(sim['F_lift']))
         peak_drag = np.max(np.abs(sim['F_drag']))
+        avg_aero_power = np.mean(sim['P_aero'])
+        peak_aero_power = np.max(sim['P_aero'])
+        avg_inertial_power = np.mean(np.abs(sim['P_inertial']))
+        peak_inertial_power = np.max(np.abs(sim['P_inertial']))
+        peak_total_power = np.max(np.abs(sim['P_total']))
         print(f"  {name}: avg_lift={avg_lift*1000:.1f} mN, avg_drag={avg_drag*1000:.1f} mN, "
               f"peak_lift={peak_lift*1000:.1f} mN, peak_drag={peak_drag*1000:.1f} mN")
+        print(f"         avg_aero_power={avg_aero_power*1000:.1f} mW, peak_aero_power={peak_aero_power*1000:.1f} mW")
+        print(f"         peak_inertial_power={peak_inertial_power*1000:.1f} mW, peak_total_power={peak_total_power*1000:.1f} mW")
     
     # Plot force vs phi
-    print("\n[2/5] Generating force vs phi plots...")
+    print("\n[2/6] Generating force vs phi plots...")
     plot_force_vs_phi(front_sim, back_sim, params, OUTPUT_DIR)
     
     # Plot time domain
-    print("\n[3/5] Generating time-domain plots...")
+    print("\n[3/6] Generating time-domain plots...")
     plot_time_domain(front_sim, back_sim, params, OUTPUT_DIR)
     
     # Plot acceleration
-    print("\n[4/5] Generating wing acceleration plots...")
+    print("\n[4/6] Generating wing acceleration plots...")
     plot_acceleration(front_sim, back_sim, params, OUTPUT_DIR)
     
+    # Plot power
+    print("\n[5/6] Generating power plots...")
+    plot_power_time_domain(front_sim, back_sim, params, OUTPUT_DIR)
+    
     # Param scan
-    print("\n[5/5] Running parameter scans...")
+    print("\n[6/6] Running parameter scans...")
     plot_param_scans(geo, params, OUTPUT_DIR)
     
     # Markdown report
-    print("\n[5/5] Generating Markdown report...")
+    print("\n[6/6] Generating Markdown report...")
     report_path = generate_markdown_report(geo, params, front_sim, back_sim, OUTPUT_DIR)
     
     print("\n" + "=" * 70)
@@ -667,6 +853,7 @@ def main():
     print(f"  - {OUTPUT_DIR / 'figures' / 'force_vs_phi.png'}")
     print(f"  - {OUTPUT_DIR / 'figures' / 'force_time_domain.png'}")
     print(f"  - {OUTPUT_DIR / 'figures' / 'wing_acceleration.png'}")
+    print(f"  - {OUTPUT_DIR / 'figures' / 'power_time_domain.png'}")
     print(f"  - {OUTPUT_DIR / 'figures' / 'param_scan.png'}")
     print(f"  - {report_path}")
     print("=" * 70)
