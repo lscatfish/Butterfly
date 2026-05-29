@@ -289,19 +289,14 @@ def aerodynamic_estimate(props, params):
     m_total = params['m_total']
     m_wing_total = params['m_wing_total']
     nu = params['nu']
-    C_r = params['C_r']
-    flip_ratio = params['flip_ratio']
-    
     # 运动学参数（使用下拍幅度 80° 计算峰值，下拍时间更长）
     Phi_max = phi_down  # 峰值出现在下拍
     phi_dot_max = 2 * np.pi * f * Phi_max
     phi_ddot_max = (2 * np.pi * f)**2 * Phi_max
     alpha_rad = np.deg2rad(alpha_deg)
     
-    # 翻转角速度：90°翻转占周期 flip_ratio
-    T = 1.0 / f
-    dt_flip = flip_ratio * T
-    alpha_dot_max = (np.pi / 2) / dt_flip  # 90° = π/2 rad
+    # 固定攻角：无翻转，alpha_dot = 0
+    alpha_dot_max = 0.0
     
     # 升阻力系数
     C_L = 0.255 + 1.58 * np.sin(np.deg2rad(2.13 * alpha_deg - 7.2))
@@ -334,31 +329,25 @@ def aerodynamic_estimate(props, params):
         # 2. 平动阻力（拍动中期）
         F_trans_drag = 0.5 * rho * C_D * (phi_dot_max * R)**2 * S * r2_sq
         
-        # 3. 旋转力（翻转时，|α̇|最大）
-        # F_rot = ρ C_r α̇ φ̇ c² R² r̂₁  （简化峰值估算）
-        F_rot = rho * C_r * alpha_dot_max * phi_dot_max * c_avg**2 * R**2 * r1
+        # 3. 旋转力：固定攻角，alpha_dot = 0，F_rot = 0
+        F_rot = 0.0
         
         # 4. 附加质量力（反转点，|φ̈|最大）
         # F_AM = (ρ π c² / 4) φ̈ R r̂₁ sinα
         F_AM = (rho * np.pi * c_avg**2 / 4.0) * phi_ddot_max * R * r1 * np.sin(alpha_rad)
         
-        # 5. 总峰值力（保守：平动+旋转+附加质量，不同时刻出现）
-        # 拍动中期峰值：平动主导
-        F_peak_mid = F_trans_lift
-        # 反转点峰值：旋转+附加质量（平动≈0）
-        F_peak_rev = abs(F_rot) + abs(F_AM)
-        # 绝对最大峰值
-        F_peak_total = max(F_peak_mid, F_peak_rev)
+        # 5. 总峰值力（平动主导，旋转力=0）
+        F_peak_total = F_trans_lift + abs(F_AM)
         
         # ====== 时间平均力 ======
         # 平动力：cos² 平均 = 1/2
         F_avg_trans_lift = F_trans_lift / 2.0
         F_avg_trans_drag = F_trans_drag / 2.0
-        # 旋转力：只在两次反转时出现，占周期 2*flip_ratio
-        F_avg_rot = abs(F_rot) * (2 * flip_ratio)
+        # 旋转力：固定攻角，为零
+        F_avg_rot = 0.0
         # 附加质量力：周期对称，时均≈0
         F_avg_AM = 0.0
-        # 总时均升力
+        # 总时均升力（静态估算仅含平动分量；动态分析含上拍负升力）
         F_avg_lift = F_avg_trans_lift + F_avg_rot + F_avg_AM
         
         # 转动惯量 & 功率
@@ -371,7 +360,7 @@ def aerodynamic_estimate(props, params):
             'C_D': C_D,
             'phi_dot_max_rad_s': phi_dot_max,
             'phi_ddot_max_rad_s2': phi_ddot_max,
-            'alpha_dot_max_rad_s': alpha_dot_max,
+            'alpha_dot_max_rad_s': alpha_dot_max,  # = 0 (fixed AoA)
             'u_tip_max_m_s': u_tip_max,
             'u_mean_m_s': u_mean,
             'Re': Re,
@@ -544,19 +533,19 @@ def print_force_breakdown(aero):
         print(f"  k           = {r['k']:.3f}")
         print(f"  u_tip_max   = {r['u_tip_max_m_s']:.2f} m/s")
         print(f"  phi_dot_max = {r['phi_dot_max_rad_s']:.1f} rad/s")
-        print(f"  alpha_dot   = {r['alpha_dot_max_rad_s']:.1f} rad/s")
+        print(f"  alpha_dot   = {r['alpha_dot_max_rad_s']:.1f} rad/s  (fixed AoA)")
         
         print(f"\n  [峰值力]")
         print(f"    Translational Lift = {r['F_trans_lift_peak_mN']:>10.2f} mN")
         print(f"    Translational Drag = {r['F_trans_drag_peak_mN']:>10.2f} mN  <--")
-        print(f"    Rotational Force   = {r['F_rot_peak_mN']:>10.2f} mN")
+        print(f"    Rotational Force   = {r['F_rot_peak_mN']:>10.2f} mN  (fixed AoA, zero)")
         print(f"    Added Mass Force   = {r['F_AM_peak_mN']:>10.2f} mN")
         print(f"    Peak Total         = {r['F_peak_total_mN']:>10.2f} mN")
         
         print(f"\n  [时均力]")
         print(f"    Avg Lift (trans)   = {r['F_avg_trans_lift_mN']:>10.2f} mN")
         print(f"    Avg Drag (trans)   = {r['F_avg_trans_drag_mN']:>10.2f} mN  <--")
-        print(f"    Avg Rotational     = {r['F_avg_rot_mN']:>10.2f} mN")
+        print(f"    Avg Rotational     = {r['F_avg_rot_mN']:>10.2f} mN  (fixed AoA, zero)")
         print(f"    Avg Total Lift     = {r['F_avg_lift_mN']:>10.2f} mN")
         
         print(f"\n  [功率]")
