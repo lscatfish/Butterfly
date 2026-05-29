@@ -32,8 +32,8 @@ AERO_PARAMS = {
     "m_total": 0.025,       # 总质量 25g
     "m_wing_total": 0.004,  # 四翅总质量 4g
     "f": 15.0,              # 典型频率 Hz (范围 15-20)
-    "phi_down_deg": 80.0,   # 下拍最大角度（向下）
-    "phi_up_deg": 60.0,     # 上拍最大角度（向上）
+    # 机构角度不做缩放，使用 mechanism.py 原始输出
+    # a=8.0 时原始范围: [-2.8°, 30.5°]（负值=下拍，正值=上拍）
     "alpha_deg": 45.0,      # 攻角 °（固定安装角）
     "mech_a": 8.0,          # 机构主点圆心 x（可调 6-14，控制摆幅）
 }
@@ -77,8 +77,6 @@ def simulate_cycle(geo_item, params, n_points=2000):
     f = params['f']
     alpha0 = np.deg2rad(params['alpha_deg'])
     rho = params['rho']
-    phi_down = params.get('phi_down_deg', 80)
-    phi_up = params.get('phi_up_deg', 60)
     mech_a = params.get('mech_a', 8.0)
 
     S = geo_item['S']
@@ -88,9 +86,9 @@ def simulate_cycle(geo_item, params, n_points=2000):
     r2_sq = geo_item['r2_sq']
 
     # ========== 机构运动学 ==========
+    # 输出原始机构角度，不做幅度缩放（保持前级机构特征）
     t, phi, phi_dot, phi_ddot, mech_info = wing_kinematics(
-        f=f, params={'a': mech_a}, n_points=n_points,
-        phi_down_deg=phi_down, phi_up_deg=phi_up)
+        f=f, params={'a': mech_a}, n_points=n_points)
 
     # ========== 固定攻角 ==========
     alpha = alpha0 * np.ones_like(t)
@@ -279,7 +277,8 @@ def plot_force_vs_phi(front_sim, back_sim, params, output_dir):
 def plot_time_domain(front_sim, back_sim, params, output_dir):
     """绘制时间域力曲线"""
     fig, axes = plt.subplots(3, 2, figsize=(16, 14))
-    fig.suptitle(f'Butterfly Wing Aerodynamic Forces (f={params["f"]}Hz, φ=-{params["phi_down_deg"]}°~+{params["phi_up_deg"]}°, α={params["alpha_deg"]}°)',
+    fig.suptitle(f'Butterfly Wing Aerodynamic Forces (f={params["f"]}Hz, α={params["alpha_deg"]}°)\n'
+                 f'原始机构角度，不做缩放（负值=下拍，正值=上拍）',
                  fontsize=14, fontweight='bold')
     
     t = front_sim['t']
@@ -645,8 +644,7 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 | 总质量 | 25 g | 机身+翅膀 |
 | 四翅总质量 | 4 g | 单翅 1 g |
 | 扑动频率 | {params['f']} Hz | 范围 10-25 Hz |
-| 下拍幅度 | {params['phi_down_deg']}° | 与水平方向夹角（向下） |
-| 上拍幅度 | {params['phi_up_deg']}° | 与水平方向夹角（向上） |
+| 机构角度范围 | [{np.min(front_sim['phi_deg']):.1f}°, {np.max(front_sim['phi_deg']):.1f}°] | 原始输出，不做缩放 |
 | 攻角 α | {params['alpha_deg']}° | 固定安装角（刚性连接，无翻转） |
 | 空气密度 | 1.225 kg/m³ | 海平面标准值 |
 
