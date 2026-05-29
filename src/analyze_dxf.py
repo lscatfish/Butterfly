@@ -28,10 +28,11 @@ AERO_PARAMS = {
     "m_total": 0.025,       # 总质量 25g
     "m_wing_total": 0.004,  # 四翅总质量 4g
     "f": 17.5,              # 典型频率 Hz (范围 15-20)
-    "Phi_max_deg": 100.0,   # 单向扇动幅度 ° (>90°)
+    "phi_down_deg": 80.0,   # 下拍最大角度 °（向下）
+    "phi_up_deg": 60.0,     # 上拍最大角度 °（向上）
     "alpha_deg": 45.0,      # 攻角 °
     "C_r": 1.5,             # 旋转力系数 (Dickinson 1.0-2.0)
-    "flip_ratio": 0.08,     # 翻转占半周期比例 (过渡区占半周期 8%)
+    "flip_ratio": 0.08,     # 翻转占半拍比例 (过渡区占半拍 8%)
 }
 
 
@@ -282,7 +283,8 @@ def calculate_wing(pts, axis, wing_name, n_bins=200):
 def aerodynamic_estimate(props, params):
     rho = params['rho']
     f = params['f']
-    Phi_max = np.deg2rad(params['Phi_max_deg'])
+    phi_down = np.deg2rad(params['phi_down_deg'])
+    phi_up = np.deg2rad(params['phi_up_deg'])
     alpha_deg = params['alpha_deg']
     m_total = params['m_total']
     m_wing_total = params['m_wing_total']
@@ -290,7 +292,8 @@ def aerodynamic_estimate(props, params):
     C_r = params['C_r']
     flip_ratio = params['flip_ratio']
     
-    # 运动学参数
+    # 运动学参数（使用下拍幅度 80° 计算峰值，下拍时间更长）
+    Phi_max = phi_down  # 峰值出现在下拍
     phi_dot_max = 2 * np.pi * f * Phi_max
     phi_ddot_max = (2 * np.pi * f)**2 * Phi_max
     alpha_rad = np.deg2rad(alpha_deg)

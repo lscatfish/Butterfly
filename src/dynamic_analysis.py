@@ -23,16 +23,18 @@ OUTPUT_DIR = PROJECT_ROOT / 'output'
 MM_TO_M = 1e-3
 
 # ==================== 用户设计参数 ====================
+# 运动学约定：翅膀水平时 φ=0，向上为正(+)，向下为(-)
 AERO_PARAMS = {
     "rho": 1.225,           # 空气密度 kg/m³
     "nu": 1.46e-5,          # 运动粘度 m²/s
     "m_total": 0.025,       # 总质量 25g
     "m_wing_total": 0.004,  # 四翅总质量 4g
     "f": 17.5,              # 典型频率 Hz (范围 15-20)
-    "Phi_max_deg": 100.0,   # 单向扇动幅度 ° (>90°)
+    "phi_down_deg": 80.0,   # 下拍最大角度（向下，取正值表示幅度）
+    "phi_up_deg": 60.0,     # 上拍最大角度（向上，取正值表示幅度）
     "alpha_deg": 45.0,      # 攻角 °
     "C_r": 1.5,             # 旋转力系数 (Dickinson 1.0-2.0)
-    "flip_ratio": 0.08,     # 翻转占半周期比例（反转过渡区）
+    "flip_ratio": 0.08,     # 翻转占半拍时间的比例（反转过渡区）
 }
 
 
@@ -71,7 +73,8 @@ def simulate_cycle(geo_item, params, n_points=2000):
     返回 dict 包含 t, phase, phi, phi_dot, phi_ddot, alpha_deg, 以及各力分量
     """
     f = params['f']
-    Phi = np.deg2rad(params['Phi_max_deg'])
+    phi_down = np.deg2rad(params['phi_down_deg'])
+    phi_up = np.deg2rad(params['phi_up_deg'])
     alpha0 = np.deg2rad(params['alpha_deg'])  # 转为弧度计算
     rho = params['rho']
     C_r = params['C_r']
@@ -84,53 +87,63 @@ def simulate_cycle(geo_item, params, n_points=2000):
     r2_sq = geo_item['r2_sq']
     
     T = 1.0 / f
-    omega = 2 * np.pi * f
     t = np.linspace(0, T, n_points)
     dt = t[1] - t[0]
     
-    # 运动学（约定：翅膀向上为正，向下为负）
-    phi = -Phi * np.sin(omega * t)
-    phi_dot = -Phi * omega * np.cos(omega * t)
-    phi_ddot = Phi * omega**2 * np.sin(omega * t)
+    # ========== 非对称运动学模型 ==========
+    # 约定：翅膀水平时 φ=0，向上为正(+)，向下为负(-)
+    # 下拍最大 -80°，上拍最大 +60°
+    # 下拍和上拍时间分配保证 phi_dot 在过渡点连续
+    t_d = T * phi_down / (phi_down + phi_up)   # 下拍时间
+    t_u = T * phi_up / (phi_down + phi_up)     # 上拍时间
     
-    # 攻角模型：在 stroke reversal 附近平滑翻转
-    # stroke reversal 发生在 phi 极值点，即 ph = pi/2 和 3pi/2
-    # 约定：phi < 0 为下拍（翅膀向下），phi > 0 为上拍（翅膀向上）
-    phase = np.mod(omega * t, 2*np.pi)
-    alpha = np.zeros_like(t)
-    half_flip = flip_ratio * np.pi  # 过渡区半宽（弧度）
+    phi = np.zeros_like(t)
+    phi_dot = np.zeros_like(t)
+    phi_ddot = np.zeros_like(t)
     
-    for i, ph in enumerate(phase):
-        # 计算到两个翻转点 (pi/2, 3pi/2) 的最小循环距离
-        d1 = abs(((ph - np.pi/2 + np.pi) % (2*np.pi)) - np.pi)
-        d2 = abs(((ph - 3*np.pi/2 + np.pi) % (2*np.pi)) - np.pi)
-        d = min(d1, d2)
-        
-        # 判断当前 stroke（以下一个 reversal 为准）
-        # 0 < ph < pi/2 或 3pi/2 < ph < 2pi: 下拍区（攻角 +alpha0）
-        # pi/2 < ph < 3pi/2: 上拍区（攻角 -alpha0）
-        is_downstroke = (ph < np.pi/2) or (ph > 3*np.pi/2)
-        
-        if d < half_flip:
-            # 过渡区：alpha 线性过渡到 0
-            frac = d / half_flip
-            if is_downstroke:
-                alpha[i] = alpha0 * frac   # 回到 +alpha0
-            else:
-                alpha[i] = -alpha0 * frac  # 回到 -alpha0
+    for i, ti in enumerate(t):
+        if ti < t_d:
+            # 下拍：phi 从 0 到 -phi_down 再到 0
+            tau = ti / t_d
+            phi[i] = -phi_down * np.sin(np.pi * tau)
+            phi_dot[i] = -phi_down * (np.pi / t_d) * np.cos(np.pi * tau)
+            phi_ddot[i] = phi_down * (np.pi / t_d)**2 * np.sin(np.pi * tau)
         else:
-            # 拍动中期
+            # 上拍：phi 从 0 到 +phi_up 再到 0
+            tau = (ti - t_d) / t_u
+            phi[i] = phi_up * np.sin(np.pi * tau)
+            phi_dot[i] = phi_up * (np.pi / t_u) * np.cos(np.pi * tau)
+            phi_ddot[i] = -phi_up * (np.pi / t_u)**2 * np.sin(np.pi * tau)
+    
+    # ========== 攻角模型 ==========
+    # 翻转点：t=0/T（周期边界）和 t=t_d（下拍→上拍过渡）
+    dt_flip = flip_ratio * min(t_d, t_u) / 2
+    alpha = np.zeros_like(t)
+    
+    for i, ti in enumerate(t):
+        d0 = min(ti, T - ti)          # 到周期边界 t=0/T 的距离
+        d1 = abs(ti - t_d)            # 到 t=t_d 的距离
+        d = min(d0, d1)
+        
+        # 判断 stroke 方向
+        is_downstroke = (0 <= ti < t_d)
+        
+        if d < dt_flip:
+            frac = d / dt_flip
             if is_downstroke:
-                alpha[i] = alpha0    # 下拍：+alpha0
+                alpha[i] = alpha0 * frac
             else:
-                alpha[i] = -alpha0   # 上拍：-alpha0
+                alpha[i] = -alpha0 * frac
+        else:
+            if is_downstroke:
+                alpha[i] = alpha0     # 下拍：+alpha0
+            else:
+                alpha[i] = -alpha0    # 上拍：-alpha0
     
-    # 确保周期连续性（ph=0 和 ph=2pi 对应同一时刻）
+    # 确保周期连续性
     alpha[-1] = alpha[0]
-    
-    # 数值求导得 alpha_dot（确保周期连续性）
     alpha_dot = np.gradient(alpha, dt)
-    alpha_dot[-1] = alpha_dot[0]  # 周期边界保持一致
+    alpha_dot[-1] = alpha_dot[0]
     
     # 计算各力分量
     C_L_arr = np.zeros_like(t)
@@ -155,7 +168,6 @@ def simulate_cycle(geo_item, params, n_points=2000):
     
     return {
         't': t,
-        'phase': phase,
         'phi_deg': np.degrees(phi),
         'phi_dot': phi_dot,
         'alpha_deg': alpha_deg,
@@ -282,7 +294,7 @@ def plot_force_vs_phi(front_sim, back_sim, params, output_dir):
 def plot_time_domain(front_sim, back_sim, params, output_dir):
     """绘制时间域力曲线"""
     fig, axes = plt.subplots(3, 2, figsize=(16, 14))
-    fig.suptitle(f'Butterfly Wing Aerodynamic Forces (f={params["f"]}Hz, Φ={params["Phi_max_deg"]}°, α={params["alpha_deg"]}°)',
+    fig.suptitle(f'Butterfly Wing Aerodynamic Forces (f={params["f"]}Hz, φ=-{params["phi_down_deg"]}°~+{params["phi_up_deg"]}°, α={params["alpha_deg"]}°)',
                  fontsize=14, fontweight='bold')
     
     t = front_sim['t']
@@ -381,7 +393,7 @@ def plot_param_scans(geo, params, output_dir):
     
     scan_configs = [
         ('f', np.linspace(10, 25, 30), 'Frequency (Hz)'),
-        ('Phi_max_deg', np.linspace(60, 140, 30), 'Amplitude (°)'),
+        ('phi_down_deg', np.linspace(40, 100, 30), 'Downstroke amplitude (°)'),
         ('alpha_deg', np.linspace(20, 70, 30), 'Angle of attack (°)'),
     ]
     
@@ -447,7 +459,8 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 | 总质量 | 25 g | 机身+翅膀 |
 | 四翅总质量 | 4 g | 单翅 1 g |
 | 扑动频率 | {params['f']} Hz | 典型值，范围 10-25 Hz |
-| 单向幅度 | {params['Phi_max_deg']}° | >90° |
+| 下拍幅度 | {params['phi_down_deg']}° | 向下最大角度 |
+| 上拍幅度 | {params['phi_up_deg']}° | 向上最大角度 |
 | 攻角 | {params['alpha_deg']}° | 典型值 |
 | 空气密度 | 1.225 kg/m³ | 海平面 |
 | 旋转力系数 C_r | {params['C_r']} | 文献范围 1.0-2.0 |
