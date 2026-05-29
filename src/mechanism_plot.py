@@ -120,8 +120,9 @@ def plot_all(params, mech, valid, a_results, a_kin_results, f, phi_down, phi_up)
     ax1.set_xlabel('x')
     ax1.set_ylabel('y')
 
-    # ---- 获取默认 a 值的运动学 ----
+    # ---- 获取默认 a 值的运动学（缩放后 + 原始） ----
     default_kin = None
+    default_kin_raw = None
     for r in a_kin_results:
         if abs(r['a'] - params['a']) < 0.01:
             default_kin = r
@@ -129,39 +130,52 @@ def plot_all(params, mech, valid, a_results, a_kin_results, f, phi_down, phi_up)
     if default_kin is None and a_kin_results:
         default_kin = a_kin_results[0]
 
-    # ---- 2. 翅膀转角 φ (实际频率) ----
-    ax2 = fig.add_subplot(2, 3, 2)
+    # 同时获取未缩放（raw）的运动学
     if default_kin:
-        t_ms = default_kin['t'] * 1000
-        ax2.plot(t_ms, np.rad2deg(default_kin['phi']), 'k-', lw=2)
+        try:
+            t_raw, phi_raw, phi_dot_raw, phi_ddot_raw, info_raw = wing_kinematics(
+                f=f, params={'a': params['a']}, n_points=default_kin['t'].size,
+                phi_down_deg=None, phi_up_deg=None)
+            default_kin_raw = {
+                't': t_raw, 'phi': phi_raw, 'phi_dot': phi_dot_raw,
+                'phi_ddot': phi_ddot_raw, 'info': info_raw}
+        except Exception:
+            pass
+
+    # ---- 2. 原始机构运动学 φ(t)（未缩放） ----
+    ax2 = fig.add_subplot(2, 3, 2)
+    if default_kin_raw:
+        t_ms = default_kin_raw['t'] * 1000
+        ax2.plot(t_ms, np.rad2deg(default_kin_raw['phi']), 'k-', lw=2)
         ax2.axhline(0, color='gray', ls='--', lw=0.8)
-        span_eff = (np.rad2deg(abs(np.min(default_kin['phi'])))
-                    + np.rad2deg(abs(np.max(default_kin['phi']))))
-        ax2.set_title(f'Wing Stroke Angle @ {f} Hz (span≈{span_eff:.0f}°)')
+        raw_span = default_kin_raw['info']['raw_span_deg']
+        ax2.set_title(f'Raw Mechanism φ(t) @ {f} Hz (raw span={raw_span:.1f}°)')
     ax2.set_xlabel('Time (ms)')
     ax2.set_ylabel('Stroke angle φ (°)')
     ax2.grid(True, alpha=0.3)
 
-    # ---- 3. 角速度 φ̇ (实际频率) ----
+    # ---- 3. 缩放后运动学 φ(t)（用于气动分析） ----
     ax3 = fig.add_subplot(2, 3, 3)
     if default_kin:
-        ax3.plot(t_ms, default_kin['phi_dot'], 'b-', lw=2)
+        t_ms = default_kin['t'] * 1000
+        ax3.plot(t_ms, np.rad2deg(default_kin['phi']), 'k-', lw=2)
         ax3.axhline(0, color='gray', ls='--', lw=0.8)
-        ax3.set_title(f'Angular Velocity @ {f} Hz '
-                      f'(peak={np.max(np.abs(default_kin["phi_dot"])):.0f} rad/s)')
+        span_eff = (np.rad2deg(abs(np.min(default_kin['phi'])))
+                    + np.rad2deg(abs(np.max(default_kin['phi']))))
+        ax3.set_title(f'Scaled φ(t) @ {f} Hz (scaled span≈{span_eff:.0f}°)')
     ax3.set_xlabel('Time (ms)')
-    ax3.set_ylabel('Angular velocity (rad/s)')
+    ax3.set_ylabel('Stroke angle φ (°)')
     ax3.grid(True, alpha=0.3)
 
-    # ---- 4. 角加速度 φ̈ (实际频率) ----
+    # ---- 4. 角速度 φ̇（缩放后，用于气动分析） ----
     ax4 = fig.add_subplot(2, 3, 4)
     if default_kin:
-        ax4.plot(t_ms, default_kin['phi_ddot'], 'r-', lw=2)
+        ax4.plot(t_ms, default_kin['phi_dot'], 'b-', lw=2)
         ax4.axhline(0, color='gray', ls='--', lw=0.8)
-        ax4.set_title(f'Angular Acceleration @ {f} Hz '
-                      f'(peak={np.max(np.abs(default_kin["phi_ddot"])):.0f} rad/s²)')
+        ax4.set_title(f'Angular Velocity @ {f} Hz '
+                      f'(peak={np.max(np.abs(default_kin["phi_dot"])):.0f} rad/s)')
     ax4.set_xlabel('Time (ms)')
-    ax4.set_ylabel('Angular acceleration (rad/s²)')
+    ax4.set_ylabel('Angular velocity (rad/s)')
     ax4.grid(True, alpha=0.3)
 
     # ---- 5. a 扫描 φ-t 叠加 (实际频率) ----
