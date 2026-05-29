@@ -17,7 +17,8 @@
 │   └── wing_analysis_results.json 几何参数与静态估算结果
 ├── src/                          Python 分析脚本
 │   ├── analyze_dxf.py            主分析脚本（几何提取 + 静态气动力）
-│   └── dynamic_analysis.py       动态分析脚本（时域仿真 + 参数扫描）
+│   ├── dynamic_analysis.py       动态分析脚本（时域仿真 + 参数扫描）
+│   └── alpha_scan.py             安装角扫描（净升力/阻力/升阻比 vs α）
 ├── output/                       生成的输出文件
 │   ├── figures/                  图表（PNG）
 │   │   ├── wing_analysis.png     几何与弦长分布
