@@ -4,7 +4,7 @@
 功能：
 1. 单周期时间域力曲线（平动升力/阻力、旋转力、附加质量力）
 2. 参数扫描：频率、幅度、攻角对升/阻力的影响
-3. 运动学由前置连杆机构（mechanism.py）生成，替代手工半正弦
+3. 运动学由前置连杆机构（mechanism.py）生成
 4. 生成高清图表 + Markdown 报告
 """
 
@@ -71,7 +71,7 @@ def cl_cd(alpha_deg):
 def simulate_cycle(geo_item, params, n_points=2000):
     """模拟一个完整周期的气动力
     
-    运动学由前置连杆机构（mechanism.py）生成，替代手工半正弦。
+    运动学由前置连杆机构（mechanism.py）生成。
     返回 dict 包含 t, phi_deg, phi_dot, alpha_deg, 以及各力分量。
     """
     f = params['f']
@@ -346,73 +346,73 @@ def plot_time_domain(front_sim, back_sim, params, output_dir):
 
 
 def plot_acceleration(front_sim, back_sim, params, output_dir):
-    """绘制翅膀角速度与角加速度"""
+    """绘制翅膀角速度与角加速度（机构运动学）"""
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    fig.suptitle(f'Wing Kinematic Acceleration (f={params["f"]}Hz, φ=-{params["phi_down_deg"]}°~+{params["phi_up_deg"]}°)',
+    fig.suptitle(f'Wing Kinematic Acceleration (f={params["f"]}Hz, '
+                 f'R={params.get("mech_R", 2.25)}, '
+                 f'α={params["alpha_deg"]}°)',
                  fontsize=14, fontweight='bold')
-    
+
     t = front_sim['t']
     T = t[-1]
     t_ms = t * 1000
-    
-    # 下拍/上拍分界时间
-    phi_down = np.deg2rad(params['phi_down_deg'])
-    phi_up = np.deg2rad(params['phi_up_deg'])
-    t_d = T * phi_down / (phi_down + phi_up)
-    
+
+    phi_dot = front_sim['phi_dot']
+    zero_cross = np.where(np.diff(np.sign(phi_dot)))[0]
+    t_div = float(t_ms[len(t_ms)//2]) if len(zero_cross) < 2 else float(t_ms[zero_cross[1]])
+
     colors = {'front': '#1f77b4', 'back': '#2ca02c'}
-    
-    # Row 0: Angular velocity
-    ax = axes[0, 0]
-    ax.plot(t_ms, front_sim['phi_dot'], color=colors['front'], lw=2, label='Front')
-    ax.plot(t_ms, back_sim['phi_dot'], '--', color=colors['back'], lw=2, label='Back')
-    ax.axvline(x=t_d*1000, color='gray', linestyle=':', lw=1.5, alpha=0.7)
-    ax.axhline(y=0, color='black', lw=0.5)
-    ax.set_ylabel('Angular velocity (rad/s)')
-    ax.set_title('Angular Velocity vs Time')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    ax.set_xlim(0, T*1000)
-    # 标注下拍/上拍
-    ax.text(t_d*1000/2, ax.get_ylim()[1]*0.85, 'Downstroke', ha='center', fontsize=9, color='#666')
-    ax.text(t_d*1000 + (T-t_d)*1000/2, ax.get_ylim()[1]*0.85, 'Upstroke', ha='center', fontsize=9, color='#666')
-    
-    ax = axes[0, 1]
-    ax.plot(t_ms, np.degrees(front_sim['phi_dot']), color=colors['front'], lw=2, label='Front')
-    ax.plot(t_ms, np.degrees(back_sim['phi_dot']), '--', color=colors['back'], lw=2, label='Back')
-    ax.axvline(x=t_d*1000, color='gray', linestyle=':', lw=1.5, alpha=0.7)
-    ax.axhline(y=0, color='black', lw=0.5)
-    ax.set_ylabel('Angular velocity (°/s)')
-    ax.set_title('Angular Velocity (deg/s)')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    ax.set_xlim(0, T*1000)
-    
-    # Row 1: Angular acceleration
-    ax = axes[1, 0]
-    ax.plot(t_ms, front_sim['phi_ddot'], color=colors['front'], lw=2, label='Front')
-    ax.plot(t_ms, back_sim['phi_ddot'], '--', color=colors['back'], lw=2, label='Back')
-    ax.axvline(x=t_d*1000, color='gray', linestyle=':', lw=1.5, alpha=0.7)
-    ax.axhline(y=0, color='black', lw=0.5)
-    ax.set_xlabel('Time (ms)')
-    ax.set_ylabel('Angular acceleration (rad/s^2)')
-    ax.set_title('Angular Acceleration vs Time')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    ax.set_xlim(0, T*1000)
-    
-    ax = axes[1, 1]
-    ax.plot(t_ms, front_sim['phi_ddot']*1000, color=colors['front'], lw=2, label='Front')
-    ax.plot(t_ms, back_sim['phi_ddot']*1000, '--', color=colors['back'], lw=2, label='Back')
-    ax.axvline(x=t_d*1000, color='gray', linestyle=':', lw=1.5, alpha=0.7)
-    ax.axhline(y=0, color='black', lw=0.5)
-    ax.set_xlabel('Time (ms)')
-    ax.set_ylabel('Angular acceleration (x10^3 rad/s^2)')
-    ax.set_title('Angular Acceleration (scaled)')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    ax.set_xlim(0, T*1000)
-    
+
+    for row_idx, ((ax_l, ax_r), suffix) in enumerate([
+        ((axes[0, 0], axes[0, 1]), ''),
+        ((axes[1, 0], axes[1, 1]), ''),
+    ]):
+        # Left: rad/s or rad/s²
+        ax = axes[row_idx, 0]
+        y_data = front_sim['phi_dot'] if row_idx == 0 else front_sim['phi_ddot']
+        y_data_b = back_sim['phi_dot'] if row_idx == 0 else back_sim['phi_ddot']
+        ylabel = 'Angular velocity (rad/s)' if row_idx == 0 else 'Angular acceleration (rad/s²)'
+        title = 'Angular Velocity vs Time' if row_idx == 0 else 'Angular Acceleration vs Time'
+        xlabel = 'Time (ms)' if row_idx == 1 else ''
+
+        ax.plot(t_ms, y_data, color=colors['front'], lw=2, label='Front')
+        ax.plot(t_ms, y_data_b, '--', color=colors['back'], lw=2, label='Back')
+        ax.axvline(x=t_div, color='gray', linestyle=':', lw=1.5, alpha=0.7)
+        ax.axhline(y=0, color='black', lw=0.5)
+        ax.set_ylabel(ylabel)
+        if xlabel:
+            ax.set_xlabel(xlabel)
+        ax.set_title(title)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        ax.set_xlim(0, T * 1000)
+
+        # Right: deg/s or scaled
+        ax = axes[row_idx, 1]
+        if row_idx == 0:
+            y_data_r = np.degrees(y_data)
+            y_data_br = np.degrees(y_data_b)
+            ylabel_r = 'Angular velocity (°/s)'
+            title_r = 'Angular Velocity (deg/s)'
+        else:
+            y_data_r = y_data * 1000
+            y_data_br = y_data_b * 1000
+            ylabel_r = 'Angular acceleration (×10³ rad/s²)'
+            title_r = 'Angular Acceleration (scaled)'
+        xlabel_r = 'Time (ms)' if row_idx == 1 else ''
+
+        ax.plot(t_ms, y_data_r, color=colors['front'], lw=2, label='Front')
+        ax.plot(t_ms, y_data_br, '--', color=colors['back'], lw=2, label='Back')
+        ax.axvline(x=t_div, color='gray', linestyle=':', lw=1.5, alpha=0.7)
+        ax.axhline(y=0, color='black', lw=0.5)
+        ax.set_ylabel(ylabel_r)
+        if xlabel_r:
+            ax.set_xlabel(xlabel_r)
+        ax.set_title(title_r)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        ax.set_xlim(0, T * 1000)
+
     plt.tight_layout()
     figures_dir = output_dir / 'figures'
     figures_dir.mkdir(parents=True, exist_ok=True)
@@ -536,7 +536,7 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 ## 5. 关键假设
 
 1. 几何数据来源于 SolidWorks DXF 导出（草图局部坐标）。
-2. **运动学由前置连杆机构生成**（mechanism.py，曲柄摇杆机构，R={params.get('mech_R', 2.25)}），替代手工半正弦模型。
+2. **运动学由前置连杆机构生成**（mechanism.py，曲柄摇杆机构，R={params.get('mech_R', 2.25)}）。
 3. 准定常模型：平动力基于瞬时速度（Dickinson/Sane 2002 分解）。
 4. 固定攻角模型：翅膀安装角 α = {params['alpha_deg']}° 不变（机械结构刚性连接），无主动翻转，旋转力为零。
 5. 上拍升力方向反转：C_L 基于 φ̇ 方向取 ±α 时的值，平动升力向下（负升力）。
