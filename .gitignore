@@ -16,6 +16,7 @@ __pycache__/
 /output/figures/*.png
 /output/tables/*.csv
 /output/reports/*.md
+!/output/reports/gear_report.md
 
 # Keep directory structure
 !/output/
