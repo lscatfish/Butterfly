@@ -73,10 +73,9 @@ calculate_planform_properties(points_mm, axis)
 
 ---
 
-## 6. 已知问题
+## 6. 职责边界
 
-- **正弦假设**：静态估算中使用了 `φ̇_max = 2πfΦ`，与 `mechanism.py` 实际运动学脱节
-- **phi_down_deg / phi_up_deg**：基于旧模型的静态估算参数，新四连杆模型下已不适用
+`analyze_dxf.py` **仅负责几何参数提取**，不包含任何气动力计算。所有气动力分析（包括升力、阻力、功率）均由 `dynamic_analysis.py` 基于 `mechanism.py` 的实际运动学完成。
 
 ---
 

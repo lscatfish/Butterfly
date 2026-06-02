@@ -120,14 +120,20 @@ def simulate_cycle(geo_item, params, n_points=2000):
             C_L_arr[i], C_D_arr[i] = cl_cd(-np.degrees(alpha0))
 
     # 平动分量（与 phi_dot^2 成正比）
+    # 升力方向：由 C_L 符号决定（下拍 +，上拍 -）
     F_trans_lift = 0.5 * rho * C_L_arr * (phi_dot * R)**2 * S * r2_sq
-    F_trans_drag = 0.5 * rho * C_D_arr * (phi_dot * R)**2 * S * r2_sq
+
+    # 阻力方向：与 phi_dot 相反（以向上为正）
+    # phi_dot < 0（下拍）→ 翅膀向下运动 → 空气阻力向上（+）
+    # phi_dot > 0（上拍）→ 翅膀向上运动 → 空气阻力向下（-）
+    F_trans_drag = -np.sign(phi_dot) * 0.5 * rho * C_D_arr * (phi_dot * R)**2 * S * r2_sq
 
     # 旋转力（Kramer效应）：F_rot = ρ * C_rot * α̇ * φ̇ * c² * R * r_rot
     # 当前 α̇ = 0，故 F_rot = 0；公式保留以备后续攻角可变
     F_rot = rho * C_rot * alpha_dot * phi_dot * c_avg**2 * R * r_rot
 
     # 附加质量力：F_AM = -(ρπc²/4)·φ̈·R·r₁·sin(α)
+    # 方向与角加速度相反（以向上为正）
     F_AM = -(rho * np.pi * c_avg**2 / 4.0) * phi_ddot * R * r1 * np.sin(alpha0)
 
     # 总升力（准定常气动力 + 附加质量）
@@ -144,7 +150,7 @@ def simulate_cycle(geo_item, params, n_points=2000):
     F_trans_drag *= k_3d
 
     F_lift = F_aero + F_AM
-    F_drag = np.abs(F_trans_drag)  # 阻力始终为正
+    F_drag = F_trans_drag  # 阻力保留方向（与运动方向相反）
     
     # ========== 功率计算 ==========
     # 单翅质量（四翅均分）
@@ -154,10 +160,9 @@ def simulate_cycle(geo_item, params, n_points=2000):
     # 转动惯量（绕转轴，基于 r2_sq）
     I_w = m_w * R**2 * r2_sq
     
-    # 气动功率：克服空气阻力的功率 = 阻力矩 × 角速度
-    # 阻力分布在整个翼面，等效力臂 ≈ R × r1（一阶矩位置）
-    # P_aero = F_drag × |φ̇| × R × r1
-    P_aero = F_drag * np.abs(phi_dot) * R * r1
+    # 气动功率：克服空气阻力的功率
+    # 阻力与角速度反向，故 P = -F_drag × φ̇ × R × r̂₁（结果恒正）
+    P_aero = -F_drag * phi_dot * R * r1
     
     # 惯性功率：加速/减速翅膀的功率 = 惯性力矩 × 角速度
     # P_inertial = I_w × φ̈ × φ̇
@@ -197,15 +202,21 @@ def param_scan(geo_item, param_name, param_range, base_params):
         p = base_params.copy()
         p[param_name] = val
         sim = simulate_cycle(geo_item, p, n_points=500)
-        # 时均力（绝对值平均）
-        avg_lift = np.mean(np.abs(sim['F_lift']))
-        avg_drag = np.mean(np.abs(sim['F_drag']))
+        # 时均力（保留方向：向上为正，向下为负）
+        ds = sim['phi_dot'] <= 0
+        us = sim['phi_dot'] > 0
+        avg_lift = np.mean(sim['F_lift'])
+        avg_drag = np.mean(sim['F_drag'])
+        avg_drag_down = np.mean(sim['F_drag'][ds]) if np.any(ds) else 0.0
+        avg_drag_up = np.mean(sim['F_drag'][us]) if np.any(us) else 0.0
         peak_lift = np.max(np.abs(sim['F_lift']))
         peak_drag = np.max(np.abs(sim['F_drag']))
         results.append({
             'val': val,
             'avg_lift_N': avg_lift,
             'avg_drag_N': avg_drag,
+            'avg_drag_down_N': avg_drag_down,
+            'avg_drag_up_N': avg_drag_up,
             'peak_lift_N': peak_lift,
             'peak_drag_N': peak_drag,
         })
@@ -593,14 +604,21 @@ def plot_param_scans(geo, params, output_dir):
         avg_drag_b = [r['avg_drag_N']*1000 for r in res_back]
         avg_lift_b = [r['avg_lift_N']*1000 for r in res_back]
         
-        # Drag plot
+        # Drag plot（下拍阻力向上为正，上拍阻力向下为负）
+        drag_down_f = [r['avg_drag_down_N']*1000 for r in res_front]
+        drag_down_b = [r['avg_drag_down_N']*1000 for r in res_back]
+        drag_up_f = [r['avg_drag_up_N']*1000 for r in res_front]
+        drag_up_b = [r['avg_drag_up_N']*1000 for r in res_back]
         ax = axes[0, col]
-        ax.plot(vals, avg_drag_f, 'o-', color='#1f77b4', lw=2, markersize=4, label='Front')
-        ax.plot(vals, avg_drag_b, 's-', color='#2ca02c', lw=2, markersize=4, label='Back')
-        ax.set_ylabel('Avg Drag (mN)')
+        ax.plot(vals, drag_down_f, 'o-', color='#f44336', lw=2, markersize=4, label='Front down')
+        ax.plot(vals, drag_down_b, 's-', color='#f44336', lw=2, markersize=4, alpha=0.5, label='Back down')
+        ax.plot(vals, drag_up_f, 'o--', color='#2196F3', lw=2, markersize=4, label='Front up')
+        ax.plot(vals, drag_up_b, 's--', color='#2196F3', lw=2, markersize=4, alpha=0.5, label='Back up')
+        ax.axhline(0, color='k', linestyle='-', lw=0.5)
+        ax.set_ylabel('Avg Drag (mN) [Up+, Down-]')
         ax.set_xlabel(xlabel)
         ax.set_title(f'Drag vs {xlabel}')
-        ax.legend()
+        ax.legend(fontsize=7)
         ax.grid(True, alpha=0.3)
         
         # Lift plot
@@ -624,10 +642,19 @@ def plot_param_scans(geo, params, output_dir):
 def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
     """生成 Markdown 报告"""
     weight = params['m_total'] * 9.81 * 1000  # mN
-    avg_lift_4w = 2 * (np.mean(np.abs(front_sim['F_lift'])) + np.mean(np.abs(back_sim['F_lift']))) * 1000
-    avg_drag_4w = 2 * (np.mean(np.abs(front_sim['F_drag'])) + np.mean(np.abs(back_sim['F_drag']))) * 1000
+    # 时均力保留方向（向上为正，向下为负）
+    avg_lift_4w = 2 * (np.mean(front_sim['F_lift']) + np.mean(back_sim['F_lift'])) * 1000
+    avg_drag_4w = 2 * (np.mean(front_sim['F_drag']) + np.mean(back_sim['F_drag'])) * 1000
     peak_lift_4w = 2 * (np.max(np.abs(front_sim['F_lift'])) + np.max(np.abs(back_sim['F_lift']))) * 1000
     peak_drag_4w = 2 * (np.max(np.abs(front_sim['F_drag'])) + np.max(np.abs(back_sim['F_drag']))) * 1000
+
+    # 分行程阻力（下拍向上为正，上拍向下为负）
+    ds_f = front_sim['phi_dot'] <= 0
+    ds_b = back_sim['phi_dot'] <= 0
+    us_f = front_sim['phi_dot'] > 0
+    us_b = back_sim['phi_dot'] > 0
+    avg_drag_down_4w = 2 * (np.mean(front_sim['F_drag'][ds_f]) + np.mean(back_sim['F_drag'][ds_b])) * 1000
+    avg_drag_up_4w = 2 * (np.mean(front_sim['F_drag'][us_f]) + np.mean(back_sim['F_drag'][us_b])) * 1000
 
     # net lift (signed)
     net_lift_f = np.mean(front_sim['F_lift']) * 1000
@@ -703,19 +730,18 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 | 项目 | 数值 | 备注 |
 |------|------|------|
 | 重量 | **{weight:.1f} mN** | mg |
-| 时均升力 | {avg_lift_4w:.1f} mN | 绝对值平均 |
-| 净升力（符号平均） | {net_lift_4w:.1f} mN | 含上拍负升力抵消 |
-| **时均阻力** | **{avg_drag_4w:.1f} mN** | **重点指标** |
+| 净升力（周期均值） | {net_lift_4w:.1f} mN | 含上拍负升力抵消 |
+| 下拍阻力（均值） | {avg_drag_down_4w:.1f} mN | 向上为正 |
+| 上拍阻力（均值） | {avg_drag_up_4w:.1f} mN | 向下为负 |
 | 峰值升力 | {peak_lift_4w:.1f} mN | AM+trans 综合峰值 |
 | 峰值阻力 | {peak_drag_4w:.1f} mN | 拍动中期 |
-| 时均升重比 | {avg_lift_4w/weight:.1f} | 绝对值平均 / 重量 |
 | 净升重比 | {net_lift_4w/weight:.1f} | 净升力 / 重量 |
 
-### 3.2 单翅明细
-| 翅膀 | 时均升力(mN) | 净升力(mN) | 时均阻力(mN) | 峰值升力(mN) |
-|------|-------------|-----------|-------------|-------------|
-| Front | {np.mean(np.abs(front_sim['F_lift']))*1000:.1f} | {net_lift_f:.1f} | {np.mean(np.abs(front_sim['F_drag']))*1000:.1f} | {np.max(np.abs(front_sim['F_lift']))*1000:.1f} |
-| Back | {np.mean(np.abs(back_sim['F_lift']))*1000:.1f} | {net_lift_b:.1f} | {np.mean(np.abs(back_sim['F_drag']))*1000:.1f} | {np.max(np.abs(back_sim['F_lift']))*1000:.1f} |
+### 3.2 单翅明细（保留方向：向上为正，向下为负）
+| 翅膀 | 净升力(mN) | 下拍阻力(mN) | 上拍阻力(mN) | 峰值升力(mN) |
+|------|-----------|-------------|-------------|-------------|
+| Front | {net_lift_f:.1f} | {np.mean(front_sim['F_drag'][ds_f])*1000:.1f} | {np.mean(front_sim['F_drag'][us_f])*1000:.1f} | {np.max(np.abs(front_sim['F_lift']))*1000:.1f} |
+| Back | {net_lift_b:.1f} | {np.mean(back_sim['F_drag'][ds_b])*1000:.1f} | {np.mean(back_sim['F_drag'][us_b])*1000:.1f} | {np.max(np.abs(back_sim['F_lift']))*1000:.1f} |
 
 > **注**：准定常模型理论估算。实际飞行中三维效应、涡脱落、翅膀柔性变形使真实力降低 30-50%。
 > 机构运动学含天然急回特性，角加速度峰值高于正弦假设。
@@ -837,10 +863,13 @@ def main():
     front_sim = simulate_cycle(geo['Front'], params)
     back_sim = simulate_cycle(geo['Back'], params)
     
-    # Compute stats
+    # Compute stats（保留方向：向上为正，向下为负）
     for name, sim in [('Front', front_sim), ('Back', back_sim)]:
-        avg_lift = np.mean(np.abs(sim['F_lift']))
-        avg_drag = np.mean(np.abs(sim['F_drag']))
+        net_lift = np.mean(sim['F_lift'])
+        ds = sim['phi_dot'] <= 0
+        us = sim['phi_dot'] > 0
+        drag_down = np.mean(sim['F_drag'][ds])
+        drag_up = np.mean(sim['F_drag'][us])
         peak_lift = np.max(np.abs(sim['F_lift']))
         peak_drag = np.max(np.abs(sim['F_drag']))
         avg_aero_power = np.mean(sim['P_aero'])
@@ -848,7 +877,8 @@ def main():
         avg_inertial_power = np.mean(np.abs(sim['P_inertial']))
         peak_inertial_power = np.max(np.abs(sim['P_inertial']))
         peak_total_power = np.max(np.abs(sim['P_total']))
-        print(f"  {name}: avg_lift={avg_lift*1000:.1f} mN, avg_drag={avg_drag*1000:.1f} mN, "
+        print(f"  {name}: net_lift={net_lift*1000:+.2f} mN, "
+              f"drag_down={drag_down*1000:+.2f} mN, drag_up={drag_up*1000:+.2f} mN, "
               f"peak_lift={peak_lift*1000:.1f} mN, peak_drag={peak_drag*1000:.1f} mN")
         print(f"         avg_aero_power={avg_aero_power*1000:.1f} mW, peak_aero_power={peak_aero_power*1000:.1f} mW")
         print(f"         peak_inertial_power={peak_inertial_power*1000:.1f} mW, peak_total_power={peak_total_power*1000:.1f} mW")

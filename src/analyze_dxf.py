@@ -28,11 +28,8 @@ AERO_PARAMS = {
     "m_total": 0.025,       # 总质量 25g
     "m_wing_total": 0.004,  # 四翅总质量 4g
     "f": 15.0,              # 典型频率 Hz (范围 15-20)
-    # 注意：机构角度不做缩放，使用 mechanism.py 原始输出
-    # a=8.0 时原始范围: [-2.8°, 30.5°]（负值=下拍，正值=上拍）
-    "phi_down_deg": 30.5,   # 机构原始下拍幅度 °（用于静态估算）
-    "phi_up_deg": 2.8,      # 机构原始上拍幅度 °（用于静态估算）
-    "alpha_deg": 45.0,      # 攻角 °（固定安装角）
+    "alpha_deg": 45.0,      # 攻角 °（参考值，实际气动分析使用 dynamic_analysis.py）
+    # 注：本脚本仅负责几何参数提取，气动力计算由 dynamic_analysis.py 基于 mechanism.py 实际运动学完成
 }
 
 
@@ -280,136 +277,6 @@ def calculate_wing(pts, axis, wing_name, n_bins=200):
     }
 
 
-def aerodynamic_estimate(props, params):
-    rho = params['rho']
-    f = params['f']
-    phi_down = np.deg2rad(params['phi_down_deg'])
-    phi_up = np.deg2rad(params['phi_up_deg'])
-    alpha_deg = params['alpha_deg']
-    m_total = params['m_total']
-    m_wing_total = params['m_wing_total']
-    nu = params['nu']
-    # 运动学参数（使用下拍幅度 80° 计算峰值，下拍时间更长）
-    Phi_max = phi_down  # 峰值出现在下拍
-    phi_dot_max = 2 * np.pi * f * Phi_max
-    phi_ddot_max = (2 * np.pi * f)**2 * Phi_max
-    alpha_rad = np.deg2rad(alpha_deg)
-    
-    # 固定攻角：无翻转，alpha_dot = 0
-    alpha_dot_max = 0.0
-    
-    # 升阻力系数
-    C_L = 0.255 + 1.58 * np.sin(np.deg2rad(2.13 * alpha_deg - 7.2))
-    C_D = 1.92 - 1.55 * np.cos(np.deg2rad(2.04 * alpha_deg - 9.82))
-    
-    results = {}
-    for p in props:
-        name = p['name']
-        S = p['S']
-        R = p['R']
-        c_avg = p['c_avg']
-        r1 = p['r1']
-        r2_sq = p['r2_sq']
-        
-        # 单翅质量（四翅均分）
-        m_w = m_wing_total / 4.0
-        
-        # 翼尖速度
-        u_tip_max = phi_dot_max * R
-        u_mean = (2.0 / np.pi) * u_tip_max
-        
-        # 雷诺数、减缩频率
-        Re = u_mean * c_avg / nu
-        omega = 2 * np.pi * f
-        k = omega * c_avg / (2 * u_mean) if u_mean > 0 else 0
-        
-        # ====== 力分解（峰值）======
-        # 1. 平动升力（拍动中期，|φ̇|最大）
-        F_trans_lift = 0.5 * rho * C_L * (phi_dot_max * R)**2 * S * r2_sq
-        # 2. 平动阻力（拍动中期）
-        F_trans_drag = 0.5 * rho * C_D * (phi_dot_max * R)**2 * S * r2_sq
-        
-        # 3. 旋转力：固定攻角，alpha_dot = 0，F_rot = 0
-        F_rot = 0.0
-        
-        # 4. 附加质量力（反转点，|φ̈|最大）
-        # F_AM = -(ρ π c² / 4) φ̈ R r̂₁ sinα（阻力加速度）
-        F_AM = -(rho * np.pi * c_avg**2 / 4.0) * phi_ddot_max * R * r1 * np.sin(alpha_rad)
-        
-        # 5. 总峰值力（平动峰值和AM峰值不同时出现，取较大者）
-        F_peak_total = max(F_trans_lift, abs(F_AM))
-        
-        # ====== 时间平均力 ======
-        # 平动力：cos² 平均 = 1/2
-        F_avg_trans_lift = F_trans_lift / 2.0
-        F_avg_trans_drag = F_trans_drag / 2.0
-        # 旋转力：固定攻角，为零
-        F_avg_rot = 0.0
-        # 附加质量力：周期对称，时均≈0
-        F_avg_AM = 0.0
-        # 总时均升力（静态估算仅含平动分量；动态分析含上拍负升力）
-        F_avg_lift = F_avg_trans_lift + F_avg_rot + F_avg_AM
-        
-        # 转动惯量 & 功率
-        I_w = m_w * R**2 * r2_sq
-        KE = 0.5 * I_w * phi_dot_max**2
-        P_inertial = 4 * KE * f
-        
-        results[name] = {
-            'C_L': C_L,
-            'C_D': C_D,
-            'phi_dot_max_rad_s': phi_dot_max,
-            'phi_ddot_max_rad_s2': phi_ddot_max,
-            'alpha_dot_max_rad_s': alpha_dot_max,  # = 0 (fixed AoA)
-            'u_tip_max_m_s': u_tip_max,
-            'u_mean_m_s': u_mean,
-            'Re': Re,
-            'k': k,
-            'm_w_g': m_w * 1000,
-            'I_w_g_mm2': I_w * 1e9,
-            
-            # 峰值力 (N)
-            'F_trans_lift_peak_N': F_trans_lift,
-            'F_trans_drag_peak_N': F_trans_drag,
-            'F_rot_peak_N': F_rot,
-            'F_AM_peak_N': F_AM,
-            'F_peak_total_N': F_peak_total,
-            
-            # 峰值力 (mN)
-            'F_trans_lift_peak_mN': F_trans_lift * 1000,
-            'F_trans_drag_peak_mN': F_trans_drag * 1000,
-            'F_rot_peak_mN': F_rot * 1000,
-            'F_AM_peak_mN': F_AM * 1000,
-            'F_peak_total_mN': F_peak_total * 1000,
-            
-            # 时均力 (mN)
-            'F_avg_trans_lift_mN': F_avg_trans_lift * 1000,
-            'F_avg_trans_drag_mN': F_avg_trans_drag * 1000,
-            'F_avg_rot_mN': F_avg_rot * 1000,
-            'F_avg_lift_mN': F_avg_lift * 1000,
-            
-            'KE_mJ': KE * 1000,
-            'P_inertial_mW': P_inertial * 1000,
-        }
-    
-    # 四翅总力（2 front + 2 back）
-    weight = m_total * 9.81
-    total_peak_lift = 2 * sum(results[n]['F_peak_total_N'] for n in results)
-    total_avg_lift = 2 * sum(results[n]['F_avg_lift_mN'] for n in results)
-    total_avg_drag = 2 * sum(results[n]['F_avg_trans_drag_mN'] for n in results)
-    
-    results['total'] = {
-        'weight_N': weight,
-        'weight_mN': weight * 1000,
-        'total_peak_lift_N': total_peak_lift,
-        'total_peak_lift_mN': total_peak_lift * 1000,
-        'total_avg_lift_mN': total_avg_lift,
-        'total_avg_drag_mN': total_avg_drag,
-        'avg_lift_to_weight': total_avg_lift / (weight * 1000) if weight > 0 else 0,
-    }
-    return results
-
-
 def plot_results(axis, front_prop, back_prop, output_dir):
     fig = plt.figure(figsize=(18, 12))
     
@@ -510,53 +377,6 @@ def plot_results(axis, front_prop, back_prop, output_dir):
     plt.close()
 
 
-def print_force_breakdown(aero):
-    """在控制台清晰输出力分解（单翅 + 四翅总计）"""
-    print("\n" + "=" * 70)
-    print("FORCE BREAKDOWN")
-    print("=" * 70)
-    
-    total = aero['total']
-    print(f"\n[四翅总计]  Weight        = {total['weight_mN']:.2f} mN")
-    print(f"[四翅总计]  Peak Lift     = {total['total_peak_lift_mN']:.2f} mN")
-    print(f"[四翅总计]  Avg Lift      = {total['total_avg_lift_mN']:.2f} mN")
-    print(f"[四翅总计]  Avg Drag      = {total['total_avg_drag_mN']:.2f} mN  <-- 重点")
-    print(f"[四翅总计]  Lift/Weight   = {total['avg_lift_to_weight']:.2f}")
-    
-    for name in ['Front', 'Back']:
-        if name not in aero:
-            continue
-        r = aero[name]
-        print(f"\n--- {name.upper()} WING (单翅) ---")
-        print(f"  Mass        = {r['m_w_g']:.2f} g")
-        print(f"  Re          = {r['Re']:.0f}")
-        print(f"  k           = {r['k']:.3f}")
-        print(f"  u_tip_max   = {r['u_tip_max_m_s']:.2f} m/s")
-        print(f"  phi_dot_max = {r['phi_dot_max_rad_s']:.1f} rad/s")
-        print(f"  alpha_dot   = {r['alpha_dot_max_rad_s']:.1f} rad/s  (fixed AoA)")
-        
-        print(f"\n  [峰值力]")
-        print(f"    Translational Lift = {r['F_trans_lift_peak_mN']:>10.2f} mN")
-        print(f"    Translational Drag = {r['F_trans_drag_peak_mN']:>10.2f} mN  <--")
-        print(f"    Rotational Force   = {r['F_rot_peak_mN']:>10.2f} mN  (fixed AoA, zero)")
-        print(f"    Added Mass Force   = {r['F_AM_peak_mN']:>10.2f} mN")
-        print(f"    Peak Total         = {r['F_peak_total_mN']:>10.2f} mN")
-        
-        print(f"\n  [时均力]")
-        print(f"    Avg Lift (trans)   = {r['F_avg_trans_lift_mN']:>10.2f} mN")
-        print(f"    Avg Drag (trans)   = {r['F_avg_trans_drag_mN']:>10.2f} mN  <--")
-        print(f"    Avg Rotational     = {r['F_avg_rot_mN']:>10.2f} mN  (fixed AoA, zero)")
-        print(f"    Avg Total Lift     = {r['F_avg_lift_mN']:>10.2f} mN")
-        
-        print(f"\n  [功率]")
-        print(f"    Inertial Power     = {r['P_inertial_mW']:>10.2f} mW")
-    
-    print("\n" + "=" * 70)
-    print("NOTE: 以上力值基于准定常模型估算，实际飞行中受三维效应、")
-    print("      涡脱落、柔性变形等因素影响，真实力可能低 30-50%。")
-    print("=" * 70)
-
-
 def main():
     print("=" * 70)
     print("BUTTERFLY WING AERODYNAMIC ANALYSIS")
@@ -586,19 +406,13 @@ def main():
         print(f"\n{p['name']}: S={p['S_mm2']:.1f} mm2  R={p['R_mm']:.1f} mm  "
               f"c_avg={p['c_avg_mm']:.1f} mm  AR={p['AR']:.2f}  r2_sq={p['r2_sq']:.4f}")
     
-    aero = aerodynamic_estimate(all_props, AERO_PARAMS)
-    print_force_breakdown(aero)
-    
-    # 保存 JSON
+    # 保存 JSON（仅几何参数，气动力由 dynamic_analysis.py 基于 mechanism.py 实际运动学计算）
     save_data = {
         'params': AERO_PARAMS,
         'axis': {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in axis.items()},
         'geometry': [{k: float(v) if isinstance(v, (np.floating, float)) else v
                       for k, v in p.items() if k not in ('y_hat', 'c_hat', 'y_centers_mm', 'chords_mm', 'pts')}
                      for p in all_props],
-        'aerodynamics': {k: {kk: float(vv) if isinstance(vv, (np.floating, float)) else vv
-                            for kk, vv in v.items()}
-                        for k, v in aero.items()},
     }
     # 保存 JSON 到 data/
     json_path = DATA_DIR / 'wing_analysis_results.json'
