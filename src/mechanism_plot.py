@@ -161,7 +161,7 @@ def plot_all(params, geo, valid, f, phi_offset_deg, a_list):
     ax3.axhline(0, color='gray', ls='--', lw=0.8)
     ax3.set_xlabel('Time (ms)')
     ax3.set_ylabel('Angular velocity (rad/s)')
-    ax3.set_title(rf'$\dot{{\phi}}(t)$ @ {f} Hz')
+    ax3.set_title(f'Angular velocity @ {f} Hz')
     ax3.legend(fontsize=8)
     ax3.grid(True, alpha=0.3)
 
@@ -176,7 +176,7 @@ def plot_all(params, geo, valid, f, phi_offset_deg, a_list):
     ax4.axhline(0, color='gray', ls='--', lw=0.8)
     ax4.set_xlabel('Time (ms)')
     ax4.set_ylabel(r'Angular acceleration ($rad/s^2$)')
-    ax4.set_title(rf'$\\ddot{{\\phi}}(t)$ @ {f} Hz')
+    ax4.set_title(f'Angular acceleration @ {f} Hz')
     ax4.legend(fontsize=8)
     ax4.grid(True, alpha=0.3)
 
@@ -218,7 +218,7 @@ def plot_all(params, geo, valid, f, phi_offset_deg, a_list):
     ax6.axhline(0, color='gray', ls='--', lw=0.8)
     ax6.set_xlabel('Time (ms)')
     ax6.set_ylabel('Angular velocity (rad/s)')
-    ax6.set_title(rf'$\dot{\phi}(t)$ for various a @ {f} Hz')
+    ax6.set_title(f'Angular velocity for various a @ {f} Hz')
     ax6.legend(fontsize=7, ncol=2)
     ax6.grid(True, alpha=0.3)
 
