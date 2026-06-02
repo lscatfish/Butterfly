@@ -132,11 +132,16 @@ def simulate_cycle(geo_item, params, n_points=2000):
     # 当前 α̇ = 0，故 F_rot = 0；公式保留以备后续攻角可变
     F_rot = rho * C_rot * alpha_dot * phi_dot * c_avg**2 * R * r_rot
 
-    # 附加质量力：F_AM = -(ρπc²/4)·φ̈·R·r₁·sin(α)
-    # 方向与角加速度相反（以向上为正）
-    F_AM = -(rho * np.pi * c_avg**2 / 4.0) * phi_ddot * R * r1 * np.sin(alpha0)
+    # 附加质量力（文献完整公式，保留 α̇ 项以备后续可变攻角）
+    # 垂直分量（垂直于翅膀平面，贡献给升力方向）：
+    #   F_AM_lift = -(ρπc²/4)·φ̈·R·r₁·sin(α)
+    # 平行分量（在翅膀平面内，由俯仰角加速度 α̇ 引起）：
+    #   F_AM_drag = (ρπc²/4)·|φ̈|·R·r₁·α̇·cos(α)  （当前 α̇=0 时自然为 0）
+    F_AM_lift = -(rho * np.pi * c_avg**2 / 4.0) * phi_ddot * R * r1 * np.sin(alpha0)
+    F_AM_drag = (rho * np.pi * c_avg**2 / 4.0) * np.abs(phi_ddot) * R * r1 * alpha_dot * np.cos(alpha0)
+    F_AM = F_AM_lift + F_AM_drag  # 总附加质量力（当前 F_AM_drag = 0）
 
-    # 总升力（准定常气动力 + 附加质量）
+    # 总升力（准定常气动力 + 附加质量垂直分量）
     F_aero = F_trans_lift + F_rot
 
     # Clap-and-Fling 简化模型：stroke reversal 附近升力增强
@@ -149,8 +154,9 @@ def simulate_cycle(geo_item, params, n_points=2000):
     F_aero *= k_3d
     F_trans_drag *= k_3d
 
-    F_lift = F_aero + F_AM
-    F_drag = F_trans_drag  # 阻力保留方向（与运动方向相反）
+    F_lift = F_aero + F_AM_lift
+    F_drag = F_trans_drag + F_AM_drag  # 阻力保留方向（与运动方向相反）
+    # 注：F_AM_drag 当前为 0，代码保留以备后续实现 pitch reversal（α̇≠0）
     
     # ========== 功率计算 ==========
     # 单翅质量（四翅均分）
