@@ -62,13 +62,15 @@ def scan_a(params: dict, a_list: list, n_frames: int = 360):
     return results
 
 
-def simulate_a_kinematics(a_list: list, f: float, n_points: int = 500):
+def simulate_a_kinematics(a_list: list, f: float, n_points: int = 500,
+                          phi_offset_deg: float = None):
     """对每个 a 值运行 wing_kinematics（输出原始机构角度，不做缩放）"""
     results = []
     for a_val in a_list:
         try:
             t, phi, phi_dot, phi_ddot, info = wing_kinematics(
-                f=f, params={'a': a_val}, n_points=n_points)
+                f=f, params={'a': a_val}, n_points=n_points,
+                phi_offset_deg=phi_offset_deg)
             results.append({
                 'a': a_val,
                 't': t,
@@ -207,6 +209,8 @@ def main():
                         help="Flapping frequency in Hz (default: 17.5)")
     parser.add_argument("--n-frames", type=int, default=2000,
                         help="Points per cycle (default: 2000)")
+    parser.add_argument("--phi-offset", type=float, default=None,
+                        help="Fixed angle offset (deg) to shift stroke center, e.g. -13.85")
     parser.add_argument("--no-plot", action="store_true")
     args = parser.parse_args()
 
@@ -220,12 +224,21 @@ def main():
 
     # 3. 实际频率运动学
     print(f"\n实际频率运动学 @ {args.freq} Hz:")
+    if args.phi_offset is not None:
+        print(f"  (含固定角度偏移 phi_offset={args.phi_offset:.2f}°)")
     a_kin_results = simulate_a_kinematics(
-        args.a_list, args.freq, n_points=args.n_frames)
+        args.a_list, args.freq, n_points=args.n_frames,
+        phi_offset_deg=args.phi_offset)
     for r in a_kin_results:
+        offset_info = ""
+        if args.phi_offset is not None:
+            eff_min = np.rad2deg(np.min(r['phi']))
+            eff_max = np.rad2deg(np.max(r['phi']))
+            offset_info = f", eff=[{eff_min:.1f}, {eff_max:.1f}]°"
         print(f"  a={r['a']}: span≈{r['info']['raw_span_deg']:.1f}°, "
               f"φ̇_max={np.max(np.abs(r['phi_dot'])):.0f} rad/s, "
-              f"φ̈_max={np.max(np.abs(r['phi_ddot'])):.0f} rad/s²")
+              f"φ̈_max={np.max(np.abs(r['phi_ddot'])):.0f} rad/s²"
+              f"{offset_info}")
 
     if not args.no_plot:
         plot_all(params, mech, valid, a_results, a_kin_results, args.freq)

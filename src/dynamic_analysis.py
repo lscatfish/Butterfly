@@ -36,6 +36,7 @@ AERO_PARAMS = {
     # a=8.0 时原始范围: [-2.8°, 30.5°]（负值=下拍，正值=上拍）
     "alpha_deg": 45.0,      # 攻角 °（固定安装角）
     "mech_a": 8.0,          # 机构主点圆心 x（可调 6-14，控制摆幅）
+    "phi_offset_deg": -13.85,  # 翅膀安装基准偏移 °，使机构运动关于水平对称
 }
 
 
@@ -87,8 +88,10 @@ def simulate_cycle(geo_item, params, n_points=2000):
 
     # ========== 机构运动学 ==========
     # 输出原始机构角度，不做幅度缩放（保持前级机构特征）
+    phi_offset = params.get('phi_offset_deg', None)
     t, phi, phi_dot, phi_ddot, mech_info = wing_kinematics(
-        f=f, params={'a': mech_a}, n_points=n_points)
+        f=f, params={'a': mech_a}, n_points=n_points,
+        phi_offset_deg=phi_offset)
 
     # ========== 固定攻角 ==========
     alpha = alpha0 * np.ones_like(t)
@@ -627,11 +630,13 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
     back_peak_inertial = np.max(np.abs(back_sim['P_inertial'])) * 1000
 
     mech_a = params.get('mech_a', 8.0)
+    phi_offset = params.get('phi_offset_deg', None)
+    phi_offset_str = f"{phi_offset:.2f}°" if phi_offset is not None else "无"
 
     md = f"""# 仿生蝴蝶翅膀空气动力学分析报告
 
-> 生成日期: 2026-05-29  
-> 运动学: 前置连杆机构 (mechanism.py)  
+> 生成日期: 2026-05-29
+> 运动学: 前置连杆机构 (mechanism.py)
 > 分析脚本: dynamic_analysis.py
 
 ---
@@ -644,7 +649,7 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 | 总质量 | 25 g | 机身+翅膀 |
 | 四翅总质量 | 4 g | 单翅 1 g |
 | 扑动频率 | {params['f']} Hz | 范围 10-25 Hz |
-| 机构角度范围 | [{np.min(front_sim['phi_deg']):.1f}°, {np.max(front_sim['phi_deg']):.1f}°] | 原始输出，不做缩放 |
+| 有效角度范围 | [{np.min(front_sim['phi_deg']):.1f}°, {np.max(front_sim['phi_deg']):.1f}°] | 含安装偏移后的实际运动范围 |
 | 攻角 α | {params['alpha_deg']}° | 固定安装角（刚性连接，无翻转） |
 | 空气密度 | 1.225 kg/m³ | 海平面标准值 |
 
@@ -656,7 +661,8 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 | R | 2.25 | 主点轨迹圆半径（固定） |
 | c | 14 | 直线方程常数（固定） |
 | l | 8 | 固定圆 x²+y²=l² 半径（固定） |
-| 机构摆幅 | {front_sim['mech_span']:.1f}° | 原始机构输出的 ± 范围 |
+| 翅膀安装偏移 | {phi_offset_str} | 折弯/安装基准调整，使运动关于水平对称 |
+| 机构原始摆幅 | {front_sim['mech_span']:.1f}° | 原始机构输出的 ± 范围 |
 | φ̇ 峰值 | {np.max(np.abs(front_sim['phi_dot'])):.1f} rad/s | 角速度峰值 |
 | φ̈ 峰值 | {np.max(np.abs(front_sim['phi_ddot'])):.0f} rad/s² | 角加速度峰值（stroke reversal） |
 
@@ -759,11 +765,12 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 
 1. 几何数据来源于 SolidWorks DXF 导出（草图局部坐标）。
 2. **运动学由前置连杆机构生成**（mechanism.py，a={mech_a}，b=6.97，R=2.25，c=14，l=8）。曲柄一周 = 翅膀一拍。
-3. 准定常模型：平动力基于瞬时速度（Dickinson/Sane 2002 分解）。
-4. 固定攻角：α = {params['alpha_deg']}°（刚性连接），α̇=0，旋转力=0。
-5. C_L 基于 φ̇ 方向：φ̇≤0 → C_L(+α)；φ̇>0 → C_L(-α)。
-6. F_AM = -(ρπc²/4)·φ̈·R·r̂₁·sin(α)，阻力加速度。
-7. 未考虑翅膀柔性变形、三维展向流动、涡干扰等效应。
+3. **固定角度偏移**：φ_offset = {phi_offset_str}，通过折弯翅膀/调整安装基准使运动关于水平位置对称。
+4. 准定常模型：平动力基于瞬时速度（Dickinson/Sane 2002 分解）。
+5. 固定攻角：α = {params['alpha_deg']}°（刚性连接），α̇=0，旋转力=0。
+6. C_L 基于 φ̇ 方向：φ̇≤0 → C_L(+α)；φ̇>0 → C_L(-α)。
+7. F_AM = -(ρπc²/4)·φ̈·R·r̂₁·sin(α)，阻力加速度。
+8. 未考虑翅膀柔性变形、三维展向流动、涡干扰等效应。
 
 ---
 
