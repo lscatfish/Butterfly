@@ -34,9 +34,14 @@ AERO_PARAMS = {
     "f": 15.0,              # 典型频率 Hz (范围 15-20)
     # 机构参数与 mechanism.py DEFAULT_PARAMS 保持一致
     # a=7.92 时原始输出范围 [28.6°, 73.1°]，中心 50.84°
-    "alpha_deg": 45.0,      # 攻角 °（固定安装角）
+    "alpha_deg": 45.0,      # 攻角 °（固定安装角，单次周期内不变）
     "mech_a": 7.92,         # 机构参数 a（A 点 y 坐标，可调，控制摆幅）
     "phi_offset_deg": -50.84,  # 翅膀安装基准偏移 °，使机构运动关于水平对称
+    # ---- 气动修正参数 ----
+    "C_rot": 1.5,           # 旋转力系数（Kramer effect），文献[24]
+    "r_rot": 0.5,           # 旋转力作用点半径系数（≈ r̂₁）
+    "k_clap": 1.3,          # Clap-and-Fling 升力增强系数，文献[38]
+    "k_3d": 0.7,            # 三维展向效应修正系数（降低 30%）
 }
 
 
@@ -93,10 +98,16 @@ def simulate_cycle(geo_item, params, n_points=2000):
         f=f, params={'a': mech_a}, n_points=n_points,
         phi_offset_deg=phi_offset)
 
-    # ========== 固定攻角 ==========
+    # ========== 固定攻角（单次周期内不变，可外部扫描） ==========
     alpha = alpha0 * np.ones_like(t)
     alpha_dot = np.zeros_like(t)
-    
+
+    # 气动修正参数
+    C_rot = params.get('C_rot', 1.5)
+    r_rot = params.get('r_rot', 0.5)
+    k_clap = params.get('k_clap', 1.3)
+    k_3d = params.get('k_3d', 0.7)
+
     # 计算各力分量 — C_L 基于瞬时速度方向（φ̇ 符号决定有效攻角）
     C_L_arr = np.zeros_like(t)
     C_D_arr = np.zeros_like(t)
@@ -107,23 +118,33 @@ def simulate_cycle(geo_item, params, n_points=2000):
         else:
             # 翅膀向上运动 → 相对来流从上方 → 有效攻角 -α
             C_L_arr[i], C_D_arr[i] = cl_cd(-np.degrees(alpha0))
-    
+
     # 平动分量（与 phi_dot^2 成正比）
-    # 注意：C_L 的符号已经包含了方向信息
-    # 下拍 C_L > 0 → 升力向上；上拍 C_L < 0 → 升力向下
     F_trans_lift = 0.5 * rho * C_L_arr * (phi_dot * R)**2 * S * r2_sq
     F_trans_drag = 0.5 * rho * C_D_arr * (phi_dot * R)**2 * S * r2_sq
-    
-    # 旋转力 = 0（因为 alpha_dot = 0，翅膀不能扭转）
-    F_rot = np.zeros_like(t)
-    
+
+    # 旋转力（Kramer效应）：F_rot = ρ * C_rot * α̇ * φ̇ * c² * R * r_rot
+    # 当前 α̇ = 0，故 F_rot = 0；公式保留以备后续攻角可变
+    F_rot = rho * C_rot * alpha_dot * phi_dot * c_avg**2 * R * r_rot
+
     # 附加质量力：F_AM = -(ρπc²/4)·φ̈·R·r₁·sin(α)
-    # 阻力加速度（a_n = φ̈·R·sinα），与 φ̇ 方向无关
     F_AM = -(rho * np.pi * c_avg**2 / 4.0) * phi_ddot * R * r1 * np.sin(alpha0)
-    
-    # 总力
-    F_lift = F_trans_lift + F_rot + F_AM
-    F_drag = np.abs(F_trans_drag)  # 阻力始终为正（与运动方向相反）
+
+    # 总升力（准定常气动力 + 附加质量）
+    F_aero = F_trans_lift + F_rot
+
+    # Clap-and-Fling 简化模型：stroke reversal 附近升力增强
+    phi_dot_peak = np.max(np.abs(phi_dot))
+    reversal_threshold = 0.1 * phi_dot_peak
+    in_reversal = np.abs(phi_dot) < reversal_threshold
+    F_aero[in_reversal] *= k_clap
+
+    # 三维展向效应修正（整体降低气动力，附加质量力不受影响）
+    F_aero *= k_3d
+    F_trans_drag *= k_3d
+
+    F_lift = F_aero + F_AM
+    F_drag = np.abs(F_trans_drag)  # 阻力始终为正
     
     # ========== 功率计算 ==========
     # 单翅质量（四翅均分）
@@ -165,7 +186,7 @@ def simulate_cycle(geo_item, params, n_points=2000):
         'P_total': P_total,
         'I_w': I_w,
         'm_w': m_w,
-        'mech_span': mech_info['raw_span_deg'],
+        'mech_span': mech_info['phi_span_deg'],
     }
 
 
@@ -199,11 +220,12 @@ def plot_force_vs_phi(front_sim, back_sim, params, output_dir):
     
     colors = {'front': '#1f77b4', 'back': '#2ca02c'}
     
-    # Helper: split into downstroke (phi < 0) and upstroke (phi > 0)
+    # Helper: split into downstroke (phi_dot < 0) and upstroke (phi_dot > 0)
+    # 必须用角速度符号分类，不能用角度本身（偏移后 phi=0 是运动最快速度点）
     def split_stroke(sim):
-        phi = sim['phi_deg']
-        ds = phi <= 0   # 下拍：phi <= 0（向下为负）
-        us = phi >= 0   # 上拍：phi >= 0（向上为正）
+        phi_dot = sim['phi_dot']
+        ds = phi_dot <= 0   # 下拍：角速度为负（向下运动）
+        us = phi_dot >= 0   # 上拍：角速度为正（向上运动）
         return ds, us
     
     ds_f, us_f = split_stroke(front_sim)
@@ -555,7 +577,7 @@ def plot_param_scans(geo, params, output_dir):
     
     scan_configs = [
         ('f', np.linspace(10, 25, 30), 'Frequency (Hz)'),
-        ('phi_down_deg', np.linspace(40, 100, 30), 'Downstroke amplitude (°)'),
+        ('mech_a', np.linspace(6, 12, 30), 'Parameter a (mm)'),
         ('alpha_deg', np.linspace(20, 70, 30), 'Angle of attack (°)'),
     ]
     
@@ -632,6 +654,8 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
     mech_a = params.get('mech_a', 8.0)
     phi_offset = params.get('phi_offset_deg', None)
     phi_offset_str = f"{phi_offset:.2f}°" if phi_offset is not None else "无"
+    k_clap = params.get('k_clap', 1.3)
+    k_3d = params.get('k_3d', 0.7)
 
     md = f"""# 仿生蝴蝶翅膀空气动力学分析报告
 
@@ -767,10 +791,12 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 2. **运动学由前置连杆机构生成**（mechanism.py，a={mech_a}，b=6.97，R=2.25，c=14，l=8）。曲柄一周 = 翅膀一拍。
 3. **固定角度偏移**：φ_offset = {phi_offset_str}，通过折弯翅膀/调整安装基准使运动关于水平位置对称。
 4. 准定常模型：平动力基于瞬时速度（Dickinson/Sane 2002 分解）。
-5. 固定攻角：α = {params['alpha_deg']}°（刚性连接），α̇=0，旋转力=0。
+5. 固定攻角：α = {params['alpha_deg']}°（刚性连接，单次周期内不变），α̇=0，旋转力公式保留但当前为 0。
 6. C_L 基于 φ̇ 方向：φ̇≤0 → C_L(+α)；φ̇>0 → C_L(-α)。
-7. F_AM = -(ρπc²/4)·φ̈·R·r̂₁·sin(α)，阻力加速度。
-8. 未考虑翅膀柔性变形、三维展向流动、涡干扰等效应。
+7. F_AM = -(ρπc²/4)·φ̈·R·r̂₁·sin(α)。
+8. Clap-and-Fling：简化模型，stroke reversal 附近（|φ̇| < 10%峰值）升力增强 {k_clap} 倍。
+9. 三维展向效应：整体气动力乘以修正系数 {k_3d}（附加质量力不受影响）。
+10. 未考虑翅膀柔性变形、尾迹捕获等效应。
 
 ---
 
