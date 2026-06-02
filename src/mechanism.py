@@ -114,6 +114,7 @@ def wing_kinematics(
     f: float,
     a: float = None,
     rotation: str = 'cw',
+    phi_offset_deg: float = None,
     params: dict = None,
     n_points: int = 2000,
 ):
@@ -133,6 +134,10 @@ def wing_kinematics(
     rotation : {'cw', 'ccw'}, default 'cw'
         主点（曲柄）旋转方向。'cw' = 顺时针，'ccw' = 逆时针。
         旋转方向会改变翅膀下拍/上拍的先后顺序和角速度分布。
+    phi_offset_deg : float, optional
+        翅膀安装基准固定偏移 [deg]。用于补偿翅膀折弯角度，
+        使机构输出关于水平位置对称。例如 -13.85°。
+        偏移在微分前施加，不改变角速度/角加速度。
     params : dict, optional
         其他机构参数（b, R, c, l）。可部分覆盖 DEFAULT_PARAMS。
     n_points : int, default 2000
@@ -190,6 +195,10 @@ def wing_kinematics(
     # 解缠绕：消除 ±2π 跳变，保证连续微分正确
     phi = np.unwrap(phi)
 
+    # 固定角度偏移（翅膀折弯/安装基准补偿）
+    if phi_offset_deg is not None:
+        phi = phi + np.deg2rad(phi_offset_deg)
+
     # 时间微分得到角速度和角加速度
     phi_dot = np.gradient(phi, dt)
     phi_ddot = np.gradient(phi_dot, dt)
@@ -200,6 +209,7 @@ def wing_kinematics(
         'params': p,
         'a': p['a'],
         'rotation': rotation,
+        'phi_offset_deg': phi_offset_deg,
         'phi_range_rad': (float(np.min(phi)), float(np.max(phi))),
         'phi_range_deg': (float(np.rad2deg(np.min(phi))), float(np.rad2deg(np.max(phi)))),
         'phi_span_deg': float(np.rad2deg(np.max(phi) - np.min(phi))),
