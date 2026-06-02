@@ -25,7 +25,7 @@ MM_TO_M = 1e-3
 AERO_PARAMS = {
     "rho": 1.225,           # 空气密度 kg/m³
     "nu": 1.46e-5,          # 运动粘度 m²/s
-    "m_total": 0.025,       # 总质量 25g
+    "m_total": 0.020,       # 总质量 20g
     "m_wing_total": 0.004,  # 四翅总质量 4g
     "f": 15.0,              # 典型频率 Hz (范围 15-20)
     "alpha_deg": 45.0,      # 攻角 °（参考值，实际气动分析使用 dynamic_analysis.py）
