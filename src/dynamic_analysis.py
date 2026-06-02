@@ -430,7 +430,7 @@ def plot_acceleration(front_sim, back_sim, params, output_dir):
         ax = axes[row_idx, 0]
         y_data = front_sim['phi_dot'] if row_idx == 0 else front_sim['phi_ddot']
         y_data_b = back_sim['phi_dot'] if row_idx == 0 else back_sim['phi_ddot']
-        ylabel = 'Angular velocity (rad/s)' if row_idx == 0 else 'Angular acceleration (rad/s²)'
+        ylabel = 'Angular velocity (rad/s)' if row_idx == 0 else r'Angular acceleration ($rad/s^2$)'
         title = 'Angular Velocity vs Time' if row_idx == 0 else 'Angular Acceleration vs Time'
         xlabel = 'Time (ms)' if row_idx == 1 else ''
 
@@ -456,7 +456,7 @@ def plot_acceleration(front_sim, back_sim, params, output_dir):
         else:
             y_data_r = y_data * 1000
             y_data_br = y_data_b * 1000
-            ylabel_r = 'Angular acceleration (×10³ rad/s²)'
+            ylabel_r = r'Angular acceleration ($\times10^3\ rad/s^2$)'
             title_r = 'Angular Acceleration (scaled)'
         xlabel_r = 'Time (ms)' if row_idx == 1 else ''
 
@@ -483,8 +483,8 @@ def plot_acceleration(front_sim, back_sim, params, output_dir):
 def plot_power_time_domain(front_sim, back_sim, params, output_dir):
     """绘制功率时间域曲线（气动 + 惯性 + 总功率）"""
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle(f'Butterfly Wing Power Requirements (f={params["f"]}Hz, α={params["alpha_deg"]}°)\n'
-                 f'P_aero = F_drag × |φ̇| × R × r̂₁    |    P_inertial = I_w × φ̈ × φ̇',
+    fig.suptitle(f'Butterfly Wing Power Requirements (f={params["f"]}Hz, alpha={params["alpha_deg"]} deg)\n'
+                 r'$P_{aero} = F_{drag} \times |\dot{\phi}| \times R \times \hat{r}_1$    |    $P_{inertial} = I_w \times \ddot{\phi} \times \dot{\phi}$',
                  fontsize=14, fontweight='bold')
     
     t = front_sim['t']
@@ -684,6 +684,21 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
     k_clap = params.get('k_clap', 1.3)
     k_3d = params.get('k_3d', 0.7)
 
+    # a 扫描净升力（固定偏移，保留方向）
+    a_range = np.linspace(6, 12, 13)
+    a_range = np.sort(np.unique(np.concatenate([a_range, [mech_a]])))
+    res_front_a = param_scan(geo['Front'], 'mech_a', a_range, params)
+    res_back_a = param_scan(geo['Back'], 'mech_a', a_range, params)
+    a_scan_rows = []
+    for rf, rb in zip(res_front_a, res_back_a):
+        a = rf['val']
+        nf = rf['avg_lift_N'] * 1000
+        nb = rb['avg_lift_N'] * 1000
+        n4 = 2 * (nf + nb)
+        marker = " **当前设计**" if abs(a - mech_a) < 0.01 else ""
+        a_scan_rows.append(f"| {a:.1f} | {nf:+.2f} | {nb:+.2f} | {n4:+.2f} | {n4/weight:.3f} |{marker}")
+    a_scan_table = "\n".join(a_scan_rows)
+
     md = f"""# 仿生蝴蝶翅膀空气动力学分析报告
 
 > 生成日期: 2026-05-29
@@ -697,7 +712,7 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 ### 1.1 飞行参数
 | 参数 | 数值 | 说明 |
 |------|------|------|
-| 总质量 | 25 g | 机身+翅膀 |
+| 总质量 | {params['m_total']*1000:.0f} g | 机身+翅膀 |
 | 四翅总质量 | 4 g | 单翅 1 g |
 | 扑动频率 | {params['f']} Hz | 范围 10-25 Hz |
 | 有效角度范围 | [{np.min(front_sim['phi_deg']):.1f}°, {np.max(front_sim['phi_deg']):.1f}°] | 含安装偏移后的实际运动范围 |
@@ -735,7 +750,7 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 | 上拍阻力（均值） | {avg_drag_up_4w:.1f} mN | 向下为负 |
 | 峰值升力 | {peak_lift_4w:.1f} mN | AM+trans 综合峰值 |
 | 峰值阻力 | {peak_drag_4w:.1f} mN | 拍动中期 |
-| 净升重比 | {net_lift_4w/weight:.1f} | 净升力 / 重量 |
+| 净升重比 | {net_lift_4w/weight:.3f} | 净升力 / 重量 |
 
 ### 3.2 单翅明细（保留方向：向上为正，向下为负）
 | 翅膀 | 净升力(mN) | 下拍阻力(mN) | 上拍阻力(mN) | 峰值升力(mN) |
@@ -798,18 +813,28 @@ def generate_markdown_report(geo, params, front_sim, back_sim, output_dir):
 ### 图 7：机构运动学（轨迹、a 扫描、span vs a）
 ![机构运动学](../figures/mechanism_analysis.png)
 
-### 图 8：安装角 α 扫描（净升力/阻力/升阻比）
+## 6. 参数 a 扫描结果（固定偏移 φ_offset = -50.84°）
+
+固定翅膀安装偏移量，改变机构参数 a（A 点 y 坐标），观察净升力变化。
+
+> 注意：偏移量固定时，只有 a ≈ 7.92 mm 使运动关于 0° 对称；其他 a 值产生不对称拍动，净升力随之变化。
+
+### 6.1 净升力 vs a
+| a (mm) | Front (mN) | Back (mN) | 四翅总计 (mN) | 升重比 | 备注 |
+|--------|-----------|-----------|--------------|--------|------|
+{a_scan_table}
+
+### 图 8：参数扫描结果（含 a 扫描升力/阻力曲线）
+![参数扫描](../figures/param_scan.png)
+
+## 7. 安装角 α 扫描
+
+安装角 α 对净升力的影响见 `alpha_scan.py` 输出：
+
+### 图 9：安装角 α 扫描（净升力/阻力/升阻比）
 ![安装角扫描](../figures/alpha_scan.png)
 
-## 7. α 扫描结果
-| α | 净升力(mN) | 阻力(mN) | L/D | vs 重量 | 评价 |
-|---|-----------|----------|-----|---------|------|
-| 17° | 286 | 1,391 | **0.206** | 1.2x | 最佳效率（但升力低） |
-| 35° | 564 | 3,009 | 0.187 | 2.3x | 安全 |
-| **45°** | **719** | 4,140 | 0.174 | **2.9x** | **当前设计** |
-| 55° | 848 | 5,262 | 0.161 | 3.5x | |
-| 75° | **960** | 6,934 | 0.138 | **3.9x** | 最大净升力 |
-| 85° | 927 | 7,274 | 0.127 | 3.8x | 阻力过大，效率降 |
+> α 扫描数值由 `alpha_scan.py` 独立生成，当前报告仅引用其图表。
 
 ## 8. 关键假设
 
