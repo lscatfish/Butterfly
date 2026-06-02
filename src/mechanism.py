@@ -110,19 +110,32 @@ def solve_phi(theta: float, params: dict) -> float:
     return phi
 
 
-def wing_kinematics(f: float, params: dict = None, n_points: int = 2000):
+def wing_kinematics(
+    f: float,
+    a: float = None,
+    rotation: str = 'cw',
+    params: dict = None,
+    n_points: int = 2000,
+):
     """
     生成翅膀运动学。
 
-    曲柄顺时针匀速转动，转一圈 = 翅膀一个完整拍动周期。
+    曲柄匀速转动，转一圈 = 翅膀一个完整拍动周期。
+    运动学结果受控于频率 f、参数 a 的大小以及主点旋转方向。
 
     参数
     ----
     f : float
         振翅频率 [Hz]。曲柄转一圈对应翅膀一拍。
-    params : dict
-        机构参数（可部分覆盖），None 则用 DEFAULT_PARAMS。
-    n_points : int
+    a : float, optional
+        翅膀转轴 A 的 y 坐标 [mm]。若指定则覆盖 params / DEFAULT_PARAMS 中的值。
+        这是最重要的可调参数，直接影响摆幅和急回特性。
+    rotation : {'cw', 'ccw'}, default 'cw'
+        主点（曲柄）旋转方向。'cw' = 顺时针，'ccw' = 逆时针。
+        旋转方向会改变翅膀下拍/上拍的先后顺序和角速度分布。
+    params : dict, optional
+        其他机构参数（b, R, c, l）。可部分覆盖 DEFAULT_PARAMS。
+    n_points : int, default 2000
         每周期时间采样点数。
 
     返回
@@ -136,19 +149,29 @@ def wing_kinematics(f: float, params: dict = None, n_points: int = 2000):
     phi_ddot : (n,) ndarray
         角加速度 [rad/s²]
     info : dict
-        机构信息（角度范围、摆幅、峰值角速度/加速度等）
+        机构信息（含频率、参数 a、旋转方向、角度范围、峰值角速度/加速度等）
     """
     full_params = DEFAULT_PARAMS.copy()
     if params is not None:
         full_params.update(params)
+    # a 作为独立参数，优先级最高
+    if a is not None:
+        full_params['a'] = float(a)
     p = full_params
 
     T = 1.0 / f
     t = np.linspace(0, T, n_points)
     dt = t[1] - t[0]
 
-    # 曲柄顺时针旋转：θ 从 0 线性减小到 -2π（一个周期）
-    theta = np.linspace(0, -2.0 * np.pi, n_points, endpoint=False)
+    # 曲柄角 θ：根据旋转方向决定变化趋势
+    if rotation == 'cw':
+        # 顺时针：θ 从 0 线性减小到 -2π
+        theta = np.linspace(0, -2.0 * np.pi, n_points, endpoint=False)
+    elif rotation == 'ccw':
+        # 逆时针：θ 从 0 线性增大到 +2π
+        theta = np.linspace(0, 2.0 * np.pi, n_points, endpoint=False)
+    else:
+        raise ValueError("rotation 必须为 'cw'（顺时针）或 'ccw'（逆时针）")
 
     # 逐点求解每个曲柄角对应的翅膀角
     phi = np.array([solve_phi(th, p) for th in theta])
@@ -175,6 +198,8 @@ def wing_kinematics(f: float, params: dict = None, n_points: int = 2000):
         'f_Hz': f,
         'T_s': T,
         'params': p,
+        'a': p['a'],
+        'rotation': rotation,
         'phi_range_rad': (float(np.min(phi)), float(np.max(phi))),
         'phi_range_deg': (float(np.rad2deg(np.min(phi))), float(np.rad2deg(np.max(phi)))),
         'phi_span_deg': float(np.rad2deg(np.max(phi) - np.min(phi))),
@@ -193,32 +218,30 @@ if __name__ == '__main__':
     print("=" * 60)
 
     f = 15.0  # Hz
+
+    # ---- 测试 1：默认参数（a=7.92，顺时针） ----
+    print("\n【测试 1】默认参数：a=7.92, rotation='cw'")
     t, phi, phi_dot, phi_ddot, info = wing_kinematics(f=f)
+    print(f"  φ range  = [{info['phi_range_deg'][0]:.2f}, {info['phi_range_deg'][1]:.2f}]°")
+    print(f"  span     = {info['phi_span_deg']:.2f}°")
+    print(f"  |φ̇|_max  = {info['phi_dot_max_rad_s']:.2f} rad/s")
 
-    phi_min, phi_max = info['phi_range_deg']
+    # ---- 测试 2：不同 a 值扫描 ----
+    print("\n【测试 2】a 参数扫描（f=15Hz, cw）:")
+    print(f"{'a':>6} {'φ_min':>10} {'φ_max':>10} {'span':>10} {'|φ̇|max':>10}")
+    print("-" * 50)
+    for a_val in [6.0, 7.0, 7.92, 9.0, 10.0, 11.0]:
+        _, _, _, _, info_i = wing_kinematics(f=f, a=a_val)
+        print(f"{a_val:6.2f} {info_i['phi_range_deg'][0]:10.2f} "
+              f"{info_i['phi_range_deg'][1]:10.2f} {info_i['phi_span_deg']:10.2f} "
+              f"{info_i['phi_dot_max_rad_s']:10.2f}")
 
-    print(f"\n--- 基本参数 ---")
-    print(f"  频率 f      = {info['f_Hz']:.1f} Hz")
-    print(f"  周期 T      = {info['T_s']*1000:.2f} ms")
-    print(f"  采样点数    = {info['n_points']}")
-
-    print(f"\n--- 翅膀运动范围 ---")
-    print(f"  φ_min       = {phi_min:.2f}°")
-    print(f"  φ_max       = {phi_max:.2f}°")
-    print(f"  总摆幅      = {info['phi_span_deg']:.2f}°")
-
-    print(f"\n--- 角速度 / 角加速度 ---")
-    print(f"  |φ̇|_max     = {info['phi_dot_max_rad_s']:.2f} rad/s")
-    print(f"  |φ̈|_max     = {info['phi_ddot_max_rad_s2']:.2f} rad/s²")
-
-    # 统计 phi>0 / phi<0 的时间占比（检验正负对称性）
-    print(f"\n--- 上下拍时间占比（以 φ=0° 为界） ---")
-    print(f"  φ > 0 (上拍侧)  : {np.mean(phi > 0)*100:.1f}%")
-    print(f"  φ < 0 (下拍侧)  : {np.mean(phi < 0)*100:.1f}%")
-    print(f"  φ = 0           : {np.mean(np.isclose(phi, 0, atol=1e-6))*100:.1f}%")
-
-    print(f"\n--- 角速度符号分布（以 φ̇=0 为界） ---")
-    print(f"  φ̇ > 0           : {np.mean(phi_dot > 0)*100:.1f}%")
-    print(f"  φ̇ < 0           : {np.mean(phi_dot < 0)*100:.1f}%")
+    # ---- 测试 3：旋转方向对比（a=7.92） ----
+    print("\n【测试 3】旋转方向对比（a=7.92, f=15Hz）:")
+    for rot in ['cw', 'ccw']:
+        _, phi_i, phi_dot_i, _, info_i = wing_kinematics(f=f, a=7.92, rotation=rot)
+        print(f"  rotation='{rot}': span={info_i['phi_span_deg']:.2f}°, "
+              f"|φ̇|max={info_i['phi_dot_max_rad_s']:.2f} rad/s, "
+              f"φ̇>0占比={np.mean(phi_dot_i > 0)*100:.1f}%")
 
     print("\nDone!")
