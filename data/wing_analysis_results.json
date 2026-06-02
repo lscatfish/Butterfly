@@ -2,7 +2,7 @@
   "params": {
     "rho": 1.225,
     "nu": 1.46e-05,
-    "m_total": 0.025,
+    "m_total": 0.02,
     "m_wing_total": 0.004,
     "f": 15.0,
     "alpha_deg": 45.0
