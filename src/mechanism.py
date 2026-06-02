@@ -34,11 +34,13 @@ PROJECT_ROOT = Path(__file__).parent.parent
 # ==================== 机构几何参数 ====================
 # 所有长度单位与 SolidWorks / .m 文件一致（mm）
 DEFAULT_PARAMS = {
-    "a": 7.92,     # 翅膀转轴 A 的 y 坐标
-    "b": 6.97,     # 圆心 B 的 x 坐标
-    "R": 2.25,     # 曲柄半径（主点圆直径 4.50 的一半）
-    "c": 14.00,    # 连杆 P1-P2 长度
-    "l": 8.00,     # 摇杆/翅膀杆 A-P2 长度
+    "a": 7.92,           # 翅膀转轴 A 的 y 坐标
+    "b": 6.97,           # 圆心 B 的 x 坐标
+    "R": 2.25,           # 曲柄半径（主点圆直径 4.50 的一半）
+    "c": 14.00,          # 连杆 P1-P2 长度
+    "l": 8.00,           # 摇杆/翅膀杆 A-P2 长度
+    "phi_offset_deg": -50.84,  # 翅膀安装基准偏移 °
+                               # 使 a=7.92 时机构输出关于水平对称
 }
 
 
@@ -136,8 +138,8 @@ def wing_kinematics(
         旋转方向会改变翅膀下拍/上拍的先后顺序和角速度分布。
     phi_offset_deg : float, optional
         翅膀安装基准固定偏移 [deg]。用于补偿翅膀折弯角度，
-        使机构输出关于水平位置对称。例如 -13.85°。
-        偏移在微分前施加，不改变角速度/角加速度。
+        使机构输出关于水平位置对称。默认使用 DEFAULT_PARAMS['phi_offset_deg']。
+        若显式传 0 则关闭偏移。偏移在微分前施加，不改变角速度/角加速度。
     params : dict, optional
         其他机构参数（b, R, c, l）。可部分覆盖 DEFAULT_PARAMS。
     n_points : int, default 2000
@@ -196,8 +198,10 @@ def wing_kinematics(
     phi = np.unwrap(phi)
 
     # 固定角度偏移（翅膀折弯/安装基准补偿）
-    if phi_offset_deg is not None:
-        phi = phi + np.deg2rad(phi_offset_deg)
+    # 若未显式传入，使用 DEFAULT_PARAMS / params 中的默认值
+    if phi_offset_deg is None:
+        phi_offset_deg = full_params.get('phi_offset_deg', 0.0)
+    phi = phi + np.deg2rad(phi_offset_deg)
 
     # 时间微分得到角速度和角加速度
     phi_dot = np.gradient(phi, dt)
