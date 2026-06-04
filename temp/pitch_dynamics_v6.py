@@ -624,21 +624,21 @@ def main():
 
         # 固定点 + 同相
         res = run_case(f"Key: {kc['label']} [in, fixed]",
-                       fp, bp, f"temp/v6_key_{kc['label'].replace(' ','_')}_in_fx.png",
+                       fp, bp, f"temp/v6_key_{kc['label'].replace(' ','_').replace('(','').replace(')','').replace('/','_')}_in_fx.png",
                        moving=False, t_end=2.0, n_steps=40000)
         if res: print(f"  {kc['label']:25s} in/fixed:  L={res['avg_Fz']:+.1f} T={res['avg_Fx']:+.1f} L/W={res['ratio']:.3f} θ={res['max_theta']:.1f}°")
 
         # 固定点 + 反相
         bp2 = bp.copy(); bp2["phase"] = np.pi
         res = run_case(f"Key: {kc['label']} [anti, fixed]",
-                       fp, bp2, f"temp/v6_key_{kc['label'].replace(' ','_')}_anti_fx.png",
+                       fp, bp2, f"temp/v6_key_{kc['label'].replace(' ','_').replace('(','').replace(')','').replace('/','_')}_anti_fx.png",
                        moving=False, t_end=2.0, n_steps=40000)
         if res: print(f"  {kc['label']:25s} anti/fixed: L={res['avg_Fz']:+.1f} T={res['avg_Fx']:+.1f} L/W={res['ratio']:.3f} θ={res['max_theta']:.1f}°")
 
         # 移动 + 反相（最接近实际飞行）
         bp3 = bp.copy(); bp3["phase"] = np.pi
         res = run_case(f"Key: {kc['label']} [anti, moving]",
-                       fp, bp3, f"temp/v6_key_{kc['label'].replace(' ','_')}_anti_mv.png",
+                       fp, bp3, f"temp/v6_key_{kc['label'].replace(' ','_').replace('(','').replace(')','').replace('/','_')}_anti_mv.png",
                        moving=True, t_end=3.0, n_steps=60000)
         if res: print(f"  {kc['label']:25s} anti/move: L={res['avg_Fz']:+.1f} T={res['avg_Fx']:+.1f} L/W={res['ratio']:.3f} θ={res['max_theta']:.1f}° Vx={res.get('max_Vx',0):.2f}")
 
