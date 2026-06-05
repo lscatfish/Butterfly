@@ -31,6 +31,9 @@ __pycache__/
 *.png
 !/output/fig/齿轮运动简图.png
 
+# NPZ data files (not tracked)
+*.npz
+
 # Stability sweep data (large NPZ files, generated)
 temp/stability/sweep_*/
 temp/stability/figures/sweep_*/
