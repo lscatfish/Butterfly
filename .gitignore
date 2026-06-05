@@ -24,6 +24,9 @@ __pycache__/
 !/output/tables/
 !/output/reports/
 
+# JSON data files (not tracked)
+*.json
+
 # Stability sweep data (large NPZ files, generated)
 temp/stability/sweep_*/
 temp/stability/figures/sweep_*/
