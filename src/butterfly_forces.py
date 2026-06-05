@@ -207,6 +207,7 @@ def _precompute_one_period(config: SimulationConfig, n_period: int = 2000):
         f=mp["f"], a=mp["a"],
         phi_offset_deg=mp["phi_offset_deg"],
         rotation=mp["rotation"],
+        params={"a": mp["a"], "b": mp["b"], "R": mp["R"], "c": mp["c"], "l": mp["l"]},
         n_points=n_period,
     )
     T = info["T_s"]
