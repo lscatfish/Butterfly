@@ -145,7 +145,52 @@ Fz = cos(ψ) × (L − sign×D)
 - 扫描 Vx 稳定解（预期 Vx 稳态 ≈ 3-5 m/s）
 - 验证 moving 模型下的 L/W 是否进一步提升
 
+## Stability Analysis System
+
+`src/stability_analysis.py` + `src/stability_plot.py` — 插拔式稳定性分析管线:
+
+```
+analysis (stability_analysis.py) ──[JSON+NPZ]──> plot (stability_plot.py)
+         │                                              │
+         └── temp/stability/ ───────────────────────────┘
+              ├── baseline/{config,summary,timeseries}
+              └── sweep_<param>/<value>/{config,summary,timeseries}
+```
+
+- **分析模块**: 单变量偏离扫描, 每完成一个值立即保存 checkpoint, 支持断点续跑
+- **绘图模块**: 完全独立, 只读文件。基线 5 张图 + 每参数 6 张偏离图
+- 基线参数: α_f=60/α_b=8, phase=0, a=7.92, R=2.25, phi_offset=-50.84 (L/W≈1)
+
+```bash
+# 基线分析
+python src/stability_analysis.py --baseline
+
+# 单变量偏离 (e.g. mech_a)
+python src/stability_analysis.py --sweep mech_a
+
+# 出图
+python src/stability_plot.py --baseline
+python src/stability_plot.py --sweep mech_a
+python src/stability_plot.py --all
+```
+
+### TODO: 全参数笛卡尔积扫描
+
+- [ ] 6 参数粗网格全扫描 (α_f × α_b × phase × a × R × phi_offset)
+- [ ] 在最优区域附近精化扫描
+- [ ] 用扫描结果更新默认参数和推荐配置
+- [ ] 写入 `stability_analysis.py` 的 `sweep_all()` 方法
+
 ## Key Parameters
+
+```python
+# v6.4 基线 (L/W≈1.03, 5s)
+BASE = {"alpha_front_deg":60, "alpha_back_deg":8, "phase_diff_deg":0,
+        "mech_a":7.92, "mech_R":2.25, "phi_offset_deg":-50.84}
+
+# v6.4 最优趋势
+# α_f=68, α_b=5, phase=-15~-30, a=5.0, R=2.5+ → L/W=10.44
+```
 
 ```python
 PHYS = {"rho":1.225, "g":9.81, "m_total":0.020, "I_yy":3e-5,
