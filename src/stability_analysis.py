@@ -32,11 +32,12 @@ BASELINE_DIR = OUT_ROOT / "baseline"
 
 
 # ============================================================
-# 基线参数 (L/W≈1 附近, v6.3 验证最充分的配置)
+# 基线参数 (能飞的配置, Fz_world > 重量, L/W_world≈2.28)
+# α_f=68, α_b=5, phase=-15, a=6.0, R=2.5
 # ============================================================
 BASELINE_CONFIG = dict(
-    alpha_front_deg=60, alpha_back_deg=8,
-    phase_diff_deg=0, mech_a=7.92, mech_R=2.25,
+    alpha_front_deg=68, alpha_back_deg=5,
+    phase_diff_deg=-15, mech_a=6.0, mech_R=2.5,
     phi_offset_deg=-50.84, rotation='cw',
     f=15.0, rho=1.225, m_total=0.020, I_yy=3e-5, d_cg=0.015,
     x_front=0.025, x_back=-0.025,

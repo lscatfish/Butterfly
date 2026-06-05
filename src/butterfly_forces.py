@@ -627,20 +627,21 @@ class ButterflyForceModel:
             Fz_world_total += wings_out[name].force_world[:, 2]
 
         weight_N = cfg.m_total * cfg.g
-        # 用体轴 Fz 计算 L/W (与 scan_v6_3 一致)
         half = n_steps // 2
         steady_idx = int(cfg.steady_start / cfg.dt) if cfg.steady_start < cfg.t_end else half
         avg_Fz_body = np.mean(Fz_body_total[steady_idx:])
         avg_Fz_world = np.mean(Fz_world_total[steady_idx:])
         avg_Fx_body = np.mean(Fx_body_total[steady_idx:])
-        lw = avg_Fz_body / weight_N
+        lw_body = avg_Fz_body / weight_N
+        lw_world = avg_Fz_world / weight_N  # 真正的物理升重比
 
         tp_deg = np.rad2deg(tp)
         peak_all = float(np.max(np.abs(tp_deg)))
         n90 = int(np.sum(np.abs(tp_deg) > 90))
 
         summary = {
-            "L/W": float(lw),
+            "L/W": float(lw_world),         # 世界系升重比 (物理悬停判据)
+            "L/W_body": float(lw_body),     # 体轴系升重比 (机构分析用)
             "avg_Fz_body_mN": float(avg_Fz_body * 1000),
             "avg_Fz_world_mN": float(avg_Fz_world * 1000),
             "avg_Fx_body_mN": float(avg_Fx_body * 1000),
@@ -655,7 +656,7 @@ class ButterflyForceModel:
 
         if progress:
             status = "✅ STABLE" if n90 == 0 else "❌ DIVERGED"
-            print(f"[ButterflyForceModel] {status} | L/W={lw:.3f} | peak={peak_all:.1f}° | n90={n90} | Fz_body={avg_Fz_body*1000:+.0f}mN | Fz_world={avg_Fz_world*1000:+.0f}mN")
+            print(f"[ButterflyForceModel] {status} | L/W={lw_world:.3f} (world) / {lw_body:.3f} (body) | peak={peak_all:.1f}° | n90={n90} | Fz_body={avg_Fz_body*1000:+.0f}mN | Fz_world={avg_Fz_world*1000:+.0f}mN")
 
         return SimulationOutput(
             t=t, theta_p=tp, theta_dot=td, theta_ddot=tdd,
