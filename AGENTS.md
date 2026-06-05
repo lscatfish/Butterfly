@@ -5,7 +5,7 @@
 
 ## Current State (2026-06-05)
 
-**当前主力模型：v6.2** — 刚性翅膀 + 非对称 α_install + 气动俯仰阻尼 + LEV 经验公式范围
+**当前主力模型：v6.3** — 刚性翅膀 + 非对称 α_install + 气动俯仰阻尼 + LEV/Lee C_L/C_D 理论公式
 
 ### 版本演进
 
@@ -13,16 +13,44 @@
 |------|------|---------|---------|
 | v6 | `temp/pitch_dynamics_v6.py` | 刚性 wing, 非对称 α_install 扫描 | L/W=1.48 但俯仰全部发散 |
 | v6.1 | `temp/pitch_dynamics_v6_1.py` | +气动俯仰阻尼 Δα(θ̇_p) | L/W=1.145, 10s 全稳定, 但全在平板区 |
-| **v6.2** | `temp/scan_low_alpha.py` | +低 α_install (28-45°) | L/W=0.615, LEV 范围, 64 组全稳定 |
+| v6.2 | `temp/scan_low_alpha.py` | +低 α_install (28-45°) | L/W=0.615, LEV 范围, 64 组全稳定 |
+| **v6.3** | `src/butterfly_forces.py` | +LEV/Lee C_L/C_D (C_D_max=3.22) | **L/W=1.033**, 10s STABLE, 达悬停条件 ✅ |
 
-### 最佳参数
+### 最佳参数 (v6.3)
 
-| 场景 | α_f | α_b | L/W | Peak θ | 公式范围 |
-|------|-----|-----|-----|--------|---------|
-| 最大升力 (v6.1) | 60° | 10° | 1.145 | 46° | 全平板 ❌ |
-| LEV 物理 (v6.2) | 45° | 10° | 0.615 | 35° | 经验公式 ✅ |
+| α_f | α_b | L/W (3s) | L/W (10s) | Peak θ | n90 | Fz_body | 状态 |
+|-----|-----|----------|-----------|--------|-----|---------|------|
+| **60°** | **8°** | 0.943 | **1.033** | 46.7° | 0 | +203 mN | ✅ 悬停达成 |
+| 60° | 10° | 0.903 | 0.993 | 45.0° | 0 | +195 mN | ✅ |
+| 60° | 12° | 0.859 | 0.948 | 43.1° | 0 | +186 mN | ✅ |
 
-详细记录见 `docs/v6_experiment_conclusions.md`
+详细记录见 `docs/v6_3_CL_CD_formula.md`，完整扫描数据见 `data/v63_scan_results.json`
+
+### 对外力输出模块: `src/butterfly_forces.py`
+
+对外调用接口，提供完整仿真管线（运动学→俯仰ODE→力输出），**全参数可配置**：
+
+```python
+from butterfly_forces import SimulationConfig, ButterflyForceModel, scan_parameters
+
+# 单次仿真
+cfg = SimulationConfig(alpha_front_deg=60, alpha_back_deg=8, phase_diff_deg=0,
+                        dt=10e-6, t_end=10.0)
+model = ButterflyForceModel(cfg)
+out = model.simulate()
+# → out.wings["FL"].force_body     # (N,3) 前翅左体轴力
+# → out.wings["FL"].rocker_principal_vec     # 摇杆主矢
+# → out.wings["FL"].rocker_principal_moment  # 摇杆主矩
+# → out.summary["L/W"]             # 升力/重量比
+
+# 参数扫描（替代 temp 扫描脚本）
+results = scan_parameters(cfg, {
+    "alpha_front_deg": [28,32,35,38,40,42,45,48,50,55,60],
+    "alpha_back_deg": [8,10,12,15,18,20,22,25,30],
+})
+```
+
+**可配置参数**：α_install (前后), 相位差, 机构 a/b/R/c/l, φ_offset, 频率 f, 时间步长 dt, 物理常数, 气动系数等。详见 `SimulationConfig` dataclass。
 
 ## Physical Model
 
@@ -69,29 +97,53 @@ Fz = cos(ψ) × (L − sign×D)
 
 ```
 ├── src/
-│   ├── mechanism.py          # 曲柄摇杆四连杆 → φ(t), φ̇(t), φ̈(t)
-│   └── analyze_dxf.py        # DXF 几何提取 → 翅膀面积/展长/面积矩
+│   ├── mechanism.py              # 曲柄摇杆四连杆 → φ(t), φ̇(t), φ̈(t)
+│   ├── butterfly_forces.py       # ★ 对外力输出模块 (v6.3+)
+│   ├── dynamic_analysis.py       # 气动力仿真 (v3)
+│   ├── analyze_dxf.py            # DXF 几何提取 → 翅膀面积/展长/面积矩
+│   ├── alpha_scan.py             # 安装角扫描
+│   └── gear_analysis.py          # 齿轮减速比分析
 ├── data/
 │   ├── WingFront.DXF / WingBack.DXF / WingsAxis.DXF
-│   └── wing_analysis_results.json
+│   ├── wing_analysis_results.json
+│   └── v63_scan_results.json     # v6.3 99组扫描完整数据
 ├── temp/
-│   ├── pitch_dynamics_v6.py       # v6 刚性翅膀 + 不对称扫描
-│   ├── pitch_dynamics_v6_1.py     # v6.1 +气动俯仰阻尼（导入用）
-│   ├── scan_low_alpha.py          # v6.2 低 α_install LEV 范围扫描
-│   ├── verify_long_stability.py   # 10s 长时稳定性验证
-│   ├── diagnose_pitch.py          # 俯仰发散根因诊断
-│   ├── diagnose_upstroke.py       # 上拍攻角 & 公式使用分析
-│   ├── debug_alpha_sweep.py       # 攻角诊断
-│   ├── debug_forces.py            # 力分量诊断
-│   ├── debug_v4_forces.py         # v4 bug 诊断（历史参考）
-│   ├── v6_fixed_scan/             # v6 固定点扫描结果图 (60 张)
-│   ├── v6_moving_scan/            # v6 移动模型扫描结果图 (72 张)
-│   └── v61_long_stability/        # v6.1 10s 验证图 (4 张)
+│   ├── pitch_dynamics_v6_1.py    # v6.1 物理引擎 (v6.2/v6.3 共用)
+│   ├── scan_v6_3.py              # v6.3 99组扫描脚本
+│   ├── verify_v63_long.py        # v6.3 10s长稳验证
+│   ├── scan_low_alpha.py         # v6.2 低 α LEV 范围扫描
+│   ├── verify_long_stability.py  # v6.1 10s长稳验证
+│   ├── diagnose_pitch.py         # 俯仰发散根因诊断
+│   ├── diagnose_upstroke.py      # 上拍攻角 & 公式使用分析
+│   ├── plot_pitch_rate.py        # pitch rate 时程图
+│   ├── debug_*.py                # 调试脚本
+│   ├── v63_long/                 # v6.3 10s 验证图 (6+3 张)
+│   ├── v6_fixed_scan/            # v6 固定点扫描结果图 (60 张)
+│   ├── v6_moving_scan/           # v6 移动模型扫描结果图 (72 张)
+│   └── v61_long_stability/       # v6.1 10s 验证图 (4 张)
 ├── docs/
-│   ├── v6_scan_report.md          # v6 初始扫描详细报告
-│   └── v6_experiment_conclusions.md # 完整实验总结
-└── AGENTS.md                      # 本文件
+│   ├── v6_3_CL_CD_formula.md     # v6.3 完整实验报告
+│   ├── v6_scan_report.md         # v6 初始扫描详细报告
+│   ├── v6_experiment_conclusions.md  # v6-v6.2 实验总结
+│   └── v6_summary_and_roadmap.md # 路线图
+└── AGENTS.md                     # 本文件
 ```
+
+## Planned: 水平运动 (Vx/前飞)
+
+**状态：计划中，尚未实施**
+
+当前 fixed 模型假设蝴蝶身体不移动（Vx=Vz=0），仅 pitch 自由。下一步加入水平移动：
+
+1. **新增状态变量**：body_x, body_Vx（RK4 扩至 4 维）
+2. **来流修正**：相对速度 v_rel = v_flap + v_body，影响有效攻角
+3. **预期效果**：前飞时来流水平分量打破上拍/下拍对称性 → 自然提升净升力
+4. **接口兼容**：`butterfly_forces.py` 已预留 `BodyState.velocity` 和 `body_to_world(position=...)`
+
+实施步骤：
+- 在 `butterfly_forces.py` 中添加 `simulate_moving()` 方法或通过 `SimulationConfig.mode='moving'` 切换
+- 扫描 Vx 稳定解（预期 Vx 稳态 ≈ 3-5 m/s）
+- 验证 moving 模型下的 L/W 是否进一步提升
 
 ## Key Parameters
 
@@ -112,23 +164,27 @@ W = 196.2 mN  # 重量 (0.020 × 9.81 × 1000)
 ## Run Commands
 
 ```bash
-# v6.2 低安装角扫描
-python temp/scan_low_alpha.py
+# v6.3 力输出模块（对外接口）
+python src/butterfly_forces.py           # 自带验证测试
 
-# v6.1 长时稳定性验证（需先确保 temp/pitch_dynamics_v6_1.py 存在）
-python temp/verify_long_stability.py
+# 调用示例
+python -c "from butterfly_forces import *; cfg=SimulationConfig(); m=ButterflyForceModel(cfg); out=m.simulate(); print(out.summary)"
+
+# v6.3 全参数扫描 (99组)
+python temp/scan_v6_3.py
+
+# v6.3 10s 长稳验证
+python temp/verify_v63_long.py
 
 # 机构运动学自测
 python src/mechanism.py
-
-# 翅膀几何提取
-python src/analyze_dxf.py
 ```
 
 ## Critical Warnings
 
-1. **α_install 必须 ≤ 45°** 才能让中段 α_eff 在经验公式有效范围 (±60°) 内
+1. **C_L/C_D 使用 v6.3 LEV/Lee 混合模型** (|α|≤55°: Dickinson, ≥65°: LEV/Lee)。不再使用平板模型
 2. **必须检查每步 |θ_p| < 90°**，不能只看稳态平均
 3. **气动俯仰阻尼 (v6.1 新增) 是稳定性关键**，不可移除
-4. **反相 180° 在当前机构下不适用** — 俯仰全部 >90°
-5. **对称安装角 (α_f=α_b) 净升力全为负** — 不对称是必要的
+4. **对称安装角 (α_f=α_b) 净升力全为负** — 不对称是必要的
+5. **体轴系 vs 世界系**：L/W 用体轴系 Fz 计算（与现有 scan 一致）。世界系 Fz 约体轴系的 50%（因 pitch 振荡导致投影损耗）。物理悬停需要世界系 Fz ≥ 重量
+6. **默认 dt=10μs** 用于精细力输出。扫描时可用 50μs 提速
