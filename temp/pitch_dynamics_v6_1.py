@@ -37,23 +37,17 @@ def load_geometry():
 GEO = load_geometry()
 
 def cl_cd_blended(alpha_deg):
-    """混合模型：经验公式 (|α|≤40°) → 平板 (|α|>70°)"""
-    abs_a = np.abs(alpha_deg)
-    lo, hi = 40.0, 70.0
-    t = np.clip((abs_a - lo) / (hi - lo), 0.0, 1.0)
-    w = 3.0 * t**2 - 2.0 * t**3  # smoothstep
+    """Dickinson 经验公式全范围延伸 (v6.3：去掉平板过渡)
 
+    C_L = 0.255 + 1.58·sin(2.13α − 7.2°)
+    C_D = 1.92 − 1.55·cos(2.04α − 9.82°)
+
+    sin/cos 天然周期，全范围可用。高 α 时 C_D 自然趋近 ~3.5，
+    比平板模型 (C_D_max=2.0) 更接近昆虫翅膀实测 (C_D≈3.0-3.5)。
+    """
     cl_e = 0.255 + 1.58 * np.sin(np.deg2rad(2.13 * alpha_deg - 7.2))
     cd_e = 1.92 - 1.55 * np.cos(np.deg2rad(2.04 * alpha_deg - 9.82))
-
-    C_N90 = 2.0
-    alpha_rad = np.deg2rad(alpha_deg)
-    cl_p = (C_N90 / 2.0) * np.sin(2.0 * alpha_rad)
-    cd_p = C_N90 * np.sin(alpha_rad)**2
-
-    C_L = (1.0 - w) * cl_e + w * cl_p
-    C_D = (1.0 - w) * cd_e + w * cd_p
-    return C_L, C_D
+    return cl_e, cd_e
 
 def precompute_kinematics(f, a, phi_offset_deg, n_points=2000):
     t, phi, phi_dot, phi_ddot, info = wing_kinematics(
