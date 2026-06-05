@@ -87,6 +87,24 @@ def scan(t_end=3.0, n_steps=60000):
             print(f"  {r['ai_f']:3d} {r['ai_b']:3d} {r['L/W']:8.3f} {r['peak']:6.0f}deg n90={r['n90']} {r['Fz']:+7.0f}")
 
     print(f"\nDone. {cnt} combos. {len(good)} stable positive-lift solutions.")
+
+    # Auto-save JSON
+    out_dir = Path(__file__).parent.parent / "data"
+    out_dir.mkdir(exist_ok=True)
+    out_path = out_dir / "v63_scan_results.json"
+    summary = {
+        "version": "v6.3",
+        "formula": "LEV/Lee hybrid (Dickinson |a|<=55, smoothstep 55-65, LEV/Lee |a|>=65)",
+        "scan_params": {"t_end_s": t_end, "n_steps": n_steps,
+                        "alpha_f_range": ai_f_range, "alpha_b_range": ai_b_range},
+        "total_combos": cnt, "positive_lift_count": len(good),
+        "best": good[0] if good else None,
+        "top_20": good[:20], "all_results": results,
+    }
+    with open(out_path, "w") as f:
+        json.dump(summary, f, indent=2, ensure_ascii=False, default=lambda x: float(x) if isinstance(x, (np.floating, np.integer)) else x)
+    print(f"Saved JSON to {out_path}")
+
     return results
 
 if __name__ == "__main__":
