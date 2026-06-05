@@ -20,6 +20,16 @@ STABILITY_DIR = _PROJ / "temp" / "stability"
 OUT_DIR = STABILITY_DIR / "figures"
 BASELINE_DIR = STABILITY_DIR / "baseline"
 
+# 基线参数 (与 stability_analysis.py 保持一致)
+BASELINE_CONFIG = dict(
+    alpha_front_deg=68, alpha_back_deg=5,
+    phase_diff_deg=-15, mech_a=6.0, mech_R=2.5,
+    phi_offset_deg=-50.84,
+    f=15.0, rho=1.225, m_total=0.020, I_yy=3e-5, d_cg=0.015,
+    x_front=0.025, x_back=-0.025,
+    dt=50e-6, t_end=5.0, theta0_deg=0.0, steady_start=3.0,
+)
+
 # 中文字体
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False

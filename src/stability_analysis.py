@@ -346,7 +346,9 @@ def _val_to_str(val) -> str:
 def _build_sweep_summary(summaries: list, param_name: str) -> dict:
     keys = ["_value", "L/W", "peak_theta_deg", "n_exceed_90",
             "mean_Fz_body_mN", "mean_Fz_world_mN", "mean_Fx_body_mN",
-            "peak_M_aero_uNm", "mean_M_aero_uNm",
+            "mean_M_aero_uNm", "peak_M_aero_uNm",
+            "mean_M_grav_uNm", "peak_M_grav_uNm",
+            "mean_M_damp_uNm", "peak_M_damp_uNm",
             "mean_abs_thetadot_rads", "peak_abs_thetadot_rads",
             "mean_abs_thetaddot_rads2", "peak_abs_thetaddot_rads2",
             "peak_alpha_eff_FL_deg", "peak_alpha_eff_BL_deg",

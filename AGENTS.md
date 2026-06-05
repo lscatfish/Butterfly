@@ -159,7 +159,19 @@ analysis (stability_analysis.py) ──[JSON+NPZ]──> plot (stability_plot.py
 
 - **分析模块**: 单变量偏离扫描, 每完成一个值立即保存 checkpoint, 支持断点续跑
 - **绘图模块**: 完全独立, 只读文件。基线 5 张图 + 每参数 6 张偏离图
-- 基线参数: α_f=60/α_b=8, phase=0, a=7.92, R=2.25, phi_offset=-50.84 (L/W≈1)
+- **v6.5 基线**: α_f=68/α_b=5, phase=-15, a=6.0, R=2.5, φ_offset=-50.84 (L/W_world=2.505)
+- **方案一扫描**: 6参数共48组，全部完成 (41.4 min)。详细报告见 `docs/v6_5_stability_sweep_report.md`
+
+### v6.5 方案一关键发现
+
+| 参数 | 敏感度 | 趋势 | 最优(L/W) |
+|------|--------|------|-----------|
+| **mech_a** | ⭐⭐⭐⭐⭐ | 单调↓ | 5.0mm → 8.246 |
+| **mech_R** | ⭐⭐⭐⭐ | 单调↑ | 3.0mm → 6.734 (3.5mm发散) |
+| **phi_offset** | ⭐⭐⭐ | 单调→0 | -30° → 3.728 |
+| **phase_diff** | ⭐⭐⭐ | 尖锐最优 | -15° → 2.505 |
+| α_back | ⭐ | 平坦 | 3-8° ~2.50 |
+| α_front | ⭐ | 极平坦 | 55-70° ~2.47-2.51 |
 
 ```bash
 # 基线分析
@@ -168,28 +180,34 @@ python src/stability_analysis.py --baseline
 # 单变量偏离 (e.g. mech_a)
 python src/stability_analysis.py --sweep mech_a
 
+# 批量全部扫描
+python temp/run_all_sweeps.py
+
 # 出图
 python src/stability_plot.py --baseline
 python src/stability_plot.py --sweep mech_a
 python src/stability_plot.py --all
 ```
 
-### TODO: 全参数笛卡尔积扫描
+### TODO
 
-- [ ] 6 参数粗网格全扫描 (α_f × α_b × phase × a × R × phi_offset)
-- [ ] 在最优区域附近精化扫描
+- [ ] **numba JIT 加速**: RK4 热循环 numba 编译 + multiprocessing 并行参数扫描 — 预期 5-10x 单仿真加速，729组粗筛 ~10分钟
+- [ ] **方案二: 全参数笛卡尔积扫描** — 6参数粗网格全扫描 (3³×...), 在最优区域精化
+- [ ] φ_offset 扩展扫描 (-30° 到 0°) — 趋势显示越正越好，需确认最优上界
+- [ ] R 临界值精密扫描 (3.0-3.5mm, 步长 0.05mm) — 确定稳定性峭壁
 - [ ] 用扫描结果更新默认参数和推荐配置
 - [ ] 写入 `stability_analysis.py` 的 `sweep_all()` 方法
 
 ## Key Parameters
 
 ```python
-# v6.4 基线 (L/W≈1.03, 5s)
-BASE = {"alpha_front_deg":60, "alpha_back_deg":8, "phase_diff_deg":0,
-        "mech_a":7.92, "mech_R":2.25, "phi_offset_deg":-50.84}
+# v6.5 基线 (L/W_world=2.505, Fz_world=+460mN, peak θ=58.1°, 5s稳定)
+BASE = {"alpha_front_deg":68, "alpha_back_deg":5, "phase_diff_deg":-15,
+        "mech_a":6.0, "mech_R":2.5, "phi_offset_deg":-50.84}
 
-# v6.4 最优趋势
-# α_f=68, α_b=5, phase=-15~-30, a=5.0, R=2.5+ → L/W=10.44
+# v6.5 单参数最优 (L/W_world)
+# a=5.0 → 8.246 | R=3.0 → 6.734 | φ_off=-30° → 3.728 | phase=-15° → 2.505
+# α_f=68, α_b=5 (平坦, 非关键)
 ```
 
 ```python
