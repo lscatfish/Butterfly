@@ -268,10 +268,12 @@ def plot_baseline_rocker(baseline_dir: Path = None, out_dir: Path = None):
     for idx, wn in enumerate(["FL", "FR", "BL", "BR"]):
         ax = axes[idx // 2, idx % 2]
         ax2 = ax.twinx()
-        ax.plot(t[mask] * 1000, ts[f"{wn}_rocker_pv_y"][mask],
-                color=colors[wn], lw=0.8, label="主矢 (Y comp)")
+        # 主矢大小 = sqrt(pv_x^2 + pv_z^2), 摇杆在 XZ 平面内
+        pv_mag = np.sqrt(ts[f"{wn}_rocker_pv_x"][mask]**2 + ts[f"{wn}_rocker_pv_z"][mask]**2)
+        ax.plot(t[mask] * 1000, pv_mag,
+                color=colors[wn], lw=0.8, label="主矢 |F|")
         ax2.plot(t[mask] * 1000, ts[f"{wn}_rocker_pm_y"][mask] * 1000,
-                 color=C["grey"], lw=0.4, alpha=0.7, label="主矩 (Y comp)")
+                 color=C["grey"], lw=0.4, alpha=0.7, label="主矩 My")
         ax.axhline(0, color="k", ls="--", lw=0.4)
         ax.set_xlabel("Time [ms]")
         ax.set_ylabel("Force [N]", color=colors[wn])

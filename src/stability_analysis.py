@@ -41,7 +41,7 @@ BASELINE_CONFIG = dict(
     phi_offset_deg=-50.84, rotation='cw',
     f=15.0, rho=1.225, m_total=0.020, I_yy=3e-5, d_cg=0.015,
     x_front=0.025, x_back=-0.025,
-    dt=10e-6, t_end=5.0, theta0_deg=0.0, steady_start=3.0,
+    dt=50e-6, t_end=5.0, theta0_deg=0.0, steady_start=3.0,
     k_3d=0.7, C_rot=1.5, r_rot=0.5, k_clap=1.3, c_damp=5e-4,
 )
 
@@ -118,7 +118,10 @@ def _extract_timeseries(out) -> dict:
         **{f"{wn}_C_L": out.wings[wn].C_L for wn in ["FL", "FR", "BL", "BR"]},
         **{f"{wn}_C_D": out.wings[wn].C_D for wn in ["FL", "FR", "BL", "BR"]},
         **{f"{wn}_phi": out.wings[wn].phi for wn in ["FL", "FR", "BL", "BR"]},
-        **{f"{wn}_rocker_pv_y": out.wings[wn].rocker_principal_vec[:, 1] for wn in ["FL", "FR", "BL", "BR"]},
+        # 摇杆主矢: 存 X/Z 分量 (在机构平面 XZ 内, Y=0)
+        **{f"{wn}_rocker_pv_x": out.wings[wn].rocker_principal_vec[:, 0] for wn in ["FL", "FR", "BL", "BR"]},
+        **{f"{wn}_rocker_pv_z": out.wings[wn].rocker_principal_vec[:, 2] for wn in ["FL", "FR", "BL", "BR"]},
+        # 摇杆主矩: Y 分量 (绕 Y 轴的有效扭矩)
         **{f"{wn}_rocker_pm_y": out.wings[wn].rocker_principal_moment[:, 1] for wn in ["FL", "FR", "BL", "BR"]},
     }
 
@@ -196,7 +199,7 @@ def _load_summary(path: Path) -> dict:
 
 def run_baseline(config_overrides: dict = None,
                   out_dir: Path = None,
-                  t_end: float = 5.0, dt: float = 10e-6) -> dict:
+                  t_end: float = 5.0, dt: float = 50e-6) -> dict:
     """运行基线分析, 保存到 baseline/.
 
     Args:
@@ -232,7 +235,7 @@ def run_baseline(config_overrides: dict = None,
 def sweep_parameter(param_name: str,
                      values: list = None,
                      base_overrides: dict = None,
-                     t_end: float = 5.0, dt: float = 10e-6) -> dict:
+                     t_end: float = 5.0, dt: float = 50e-6) -> dict:
     """单变量偏离扫描.
 
     从 BASELINE_CONFIG 出发, 每次只改 param_name, 扫描 values 中每个值.
@@ -367,7 +370,7 @@ if __name__ == "__main__":
     ap.add_argument("--sweep", type=str, default=None,
                     help="Parameter name to sweep (e.g. alpha_front_deg)")
     ap.add_argument("--t-end", type=float, default=5.0)
-    ap.add_argument("--dt", type=float, default=10e-6)
+    ap.add_argument("--dt", type=float, default=50e-6)
     args = ap.parse_args()
 
     if args.baseline:
