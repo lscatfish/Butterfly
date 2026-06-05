@@ -37,17 +37,42 @@ def load_geometry():
 GEO = load_geometry()
 
 def cl_cd_blended(alpha_deg):
-    """Dickinson 经验公式全范围延伸 (v6.3：去掉平板过渡)
+    """v6.3 LEV理论 + Lee公式 + Dickinson低攻角匹配
 
-    C_L = 0.255 + 1.58·sin(2.13α − 7.2°)
-    C_D = 1.92 − 1.55·cos(2.04α − 9.82°)
+    |alpha| <= 60deg: Dickinson 经验 (含LEV增强, 已验证)
+    |alpha| >  60deg: LEV-theoretic C_L = A*sin(2a), Lee C_D = C_D0 + A_D*(1-cos(2a))
 
-    sin/cos 天然周期，全范围可用。高 α 时 C_D 自然趋近 ~3.5，
-    比平板模型 (C_D_max=2.0) 更接近昆虫翅膀实测 (C_D≈3.0-3.5)。
+    连续条件 at |alpha|=60deg:
+      Dickinson: C_L=1.616, C_D=2.515
+      C_D at a=0: 0.393
+      A_adj = 1.616 / sin(120deg) = 1.866
+      C_D0 = 0.393
+      A_D = (2.515 - 0.393) / (1 - cos(120deg)) = 2.122 / 1.5 = 1.414
+
+    参考: [32] JRSI 2017 (LEV), [24] 机器人 2025 (Lee)
     """
-    cl_e = 0.255 + 1.58 * np.sin(np.deg2rad(2.13 * alpha_deg - 7.2))
-    cd_e = 1.92 - 1.55 * np.cos(np.deg2rad(2.04 * alpha_deg - 9.82))
-    return cl_e, cd_e
+    abs_a = np.abs(alpha_deg)
+    alpha_rad = np.deg2rad(alpha_deg)
+
+    # Dickinson 经验（所有 alpha，用于低攻角段）
+    cl_d = 0.255 + 1.58 * np.sin(np.deg2rad(2.13 * alpha_deg - 7.2))
+    cd_d = 1.92 - 1.55 * np.cos(np.deg2rad(2.04 * alpha_deg - 9.82))
+
+    # LEV/Lee 理论（所有 alpha，物理形式正确）
+    A_adj = 1.866
+    C_D0 = 0.393
+    A_D = 1.414
+    cl_lev = A_adj * np.sin(2.0 * alpha_rad)
+    cd_lee = C_D0 + A_D * (1.0 - np.cos(2.0 * alpha_rad))
+
+    # smoothstep 混合：|alpha| <= 55 (纯Dickinson) -> |alpha| >= 65 (纯LEV/Lee)
+    lo, hi = 55.0, 65.0
+    t = np.clip((abs_a - lo) / (hi - lo), 0.0, 1.0)
+    w = 3.0 * t**2 - 2.0 * t**3
+
+    C_L = (1.0 - w) * cl_d + w * cl_lev
+    C_D = (1.0 - w) * cd_d + w * cd_lee
+    return C_L, C_D
 
 def precompute_kinematics(f, a, phi_offset_deg, n_points=2000):
     t, phi, phi_dot, phi_ddot, info = wing_kinematics(
