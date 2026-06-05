@@ -29,6 +29,7 @@ __pycache__/
 
 # PNG image files (not tracked)
 *.png
+!/output/fig/齿轮运动简图.png
 
 # Stability sweep data (large NPZ files, generated)
 temp/stability/sweep_*/
