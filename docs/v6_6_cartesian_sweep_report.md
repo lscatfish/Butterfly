@@ -607,3 +607,122 @@ temp/stability/sweep_cartesian/
 | c_damp | N/A | 5e-4 | 新参数 |
 | rotation | N/A | cw | 新参数 |
 
+### F. 模块 API 参考
+
+#### F.1 `sweep_cartesian.py` — 方案二笛卡尔积扫描
+
+```python
+# ---- 网格生成 ----
+build_cartesian_grid(grid_spec: dict = None) -> list[dict]
+"""从 {param: [values]} 生成所有笛卡尔积组合.
+   默认使用 DEFAULT_GRID.
+   返回: [{"alpha_front_deg": 60, "mech_a": 6, ...}, ...]
+"""
+
+# ---- combo_id 编解码 ----
+combo_to_id(combo: dict) -> str
+"""参数组合 → 紧凑文件夹名. 可逆.
+   例: {"alpha_front_deg": 60, "mech_a": 6} → "af60_ab5_..._a6_..."
+"""
+
+id_to_combo(combo_id: str, grid_keys: list) -> dict
+"""文件夹名 → 参数组合 (反向解码).
+   例: "af60_a6_R3_pon30_f17_rotcw" → {"alpha_front_deg": 60, "mech_a": 6, ...}
+"""
+
+# ---- 单组合运行 (joblib worker) ----
+run_one_combo(combo: dict, out_root: Path = None,
+              base_overrides: dict = None,
+              t_end: float = 5.0, dt: float = 50e-6,
+              verbose: bool = False) -> dict
+"""运行单个参数组合, 保存 {config,summary,timeseries} 到磁盘.
+   已完成则跳过 (断点续跑).
+   返回: summary dict (含 _combo_id, _combo, L/W, ...)
+"""
+
+# ---- 主入口 ----
+sweep_cartesian(grid_spec: dict = None,
+                base_overrides: dict = None,
+                n_jobs: int = -1,
+                t_end: float = 5.0, dt: float = 50e-6,
+                out_root: Path = None) -> list[dict]
+"""笛卡尔积参数扫描 — joblib 并行.
+   Args:
+     grid_spec: {param: [values]}, 默认 DEFAULT_GRID
+     n_jobs: 并行 worker 数, -1=全部核心
+   Returns:
+     [{summary}] 所有组合的结果
+"""
+
+# ---- 网格定义 (可直接编辑) ----
+DEFAULT_GRID: dict
+PARAM_SHORT: dict  # 参数名 → 缩写映射
+
+# ---- 输出路径 ----
+OUT_ROOT: Path  # temp/stability/sweep_cartesian/
+```
+
+**CLI 使用**:
+```bash
+python src/sweep_cartesian.py --n-jobs 16 --t-end 5.0 --dt 50e-6
+python src/sweep_cartesian.py --list-grid                        # 查看默认网格
+python src/sweep_cartesian.py --grid my_grid.json --n-jobs 8    # 自定义网格
+```
+
+#### F.2 `stability_analysis.py` — 方案一单变量扫描
+
+```python
+# ---- 基线 ----
+run_baseline(config_overrides: dict = None, out_dir: Path = None,
+             t_end: float = 5.0, dt: float = 50e-6) -> dict
+"""运行基线分析, 保存到 temp/stability/baseline/.
+   返回: summary dict
+"""
+
+# ---- 单变量偏离 ----
+sweep_parameter(param_name: str, values: list = None,
+                base_overrides: dict = None,
+                t_end: float = 5.0, dt: float = 50e-6) -> dict
+"""单变量偏离扫描. 从 BASELINE_CONFIG 出发, 每次只改 param_name.
+   支持断点续跑 (checkpoint.json).
+   Args:
+     param_name: 参数名 (必须在 SWEEP_RANGES 中)
+     values: 参数值列表, 默认用 SWEEP_RANGES[param_name]
+   返回: sweep_summary dict
+"""
+
+# ---- 扫描范围 ----
+SWEEP_RANGES: dict  # {param_name: [values]}
+BASELINE_CONFIG: dict
+PARAM_FORMATS: dict  # 参数名 → 短格式
+
+# ---- 输出路径 ----
+OUT_ROOT: Path       # temp/stability/
+BASELINE_DIR: Path   # temp/stability/baseline/
+```
+
+**CLI 使用**:
+```bash
+python src/stability_analysis.py --baseline
+python src/stability_analysis.py --sweep mech_a
+```
+
+#### F.3 两模块共用输出格式
+
+```
+temp/stability/
+├── baseline/                          # 方案一基线
+│   ├── config.json / summary.json / timeseries.npz
+├── sweep_<param>/                     # 方案一单变量
+│   ├── checkpoint.json
+│   ├── sweep_summary.json
+│   └── <value>/
+│       ├── config.json / summary.json / timeseries.npz
+└── sweep_cartesian/                   # 方案二笛卡尔积
+    ├── sweep_summary.json
+    └── <combo_id>/
+        ├── config.json / summary.json / timeseries.npz
+```
+
+两模块的 `config.json` / `summary.json` / `timeseries.npz` 格式完全一致，绘图模块可跨方案复用。
+
