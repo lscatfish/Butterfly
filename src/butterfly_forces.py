@@ -27,6 +27,19 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, Dict, List, Tuple
 
+try:
+    from numba import njit
+    _HAS_NUMBA = True
+except ImportError:
+    _HAS_NUMBA = False
+    def njit(*args, **kwargs):
+        """No-op decorator when numba unavailable."""
+        def _decorator(fn):
+            return fn
+        if len(args) == 1 and callable(args[0]):
+            return args[0]
+        return _decorator
+
 # ---- project root for imports ----
 _PROJ = Path(__file__).parent.parent
 sys.path.insert(0, str(_PROJ / "src"))
@@ -166,6 +179,166 @@ def cl_cd_blended(alpha_deg):
     C_L = (1.0 - w) * cl_d + w * cl_lev
     C_D = (1.0 - w) * cd_d + w * cd_lee
     return C_L, C_D
+
+
+# ============================================================
+# Numba JIT 加速 — 标量热路径
+# ============================================================
+
+@njit(cache=True, fastmath=True)
+def _cl_cd_blended_scalar(alpha_deg):
+    """Numba标量版 cl_cd_blended — 与向量版数学一致."""
+    abs_a = abs(alpha_deg)
+    alpha_rad = alpha_deg * np.pi / 180.0
+
+    # Dickinson 经验
+    cl_d = 0.255 + 1.58 * np.sin((2.13 * alpha_deg - 7.2) * np.pi / 180.0)
+    cd_d = 1.92 - 1.55 * np.cos((2.04 * alpha_deg - 9.82) * np.pi / 180.0)
+
+    # LEV/Lee 理论
+    cl_lev = 1.866 * np.sin(2.0 * alpha_rad)
+    cd_lee = 0.393 + 1.414 * (1.0 - np.cos(2.0 * alpha_rad))
+
+    # smoothstep 55-65 deg
+    if abs_a <= 55.0:
+        w = 0.0
+    elif abs_a >= 65.0:
+        w = 1.0
+    else:
+        t = (abs_a - 55.0) / 10.0
+        w = 3.0 * t * t - 2.0 * t * t * t
+
+    C_L = (1.0 - w) * cl_d + w * cl_lev
+    C_D = (1.0 - w) * cd_d + w * cd_lee
+    return C_L, C_D
+
+
+@njit(cache=True, fastmath=True)
+def _wing_forces_scalar(phi, phi_dot, phi_ddot, theta_p, theta_dot,
+                         alpha_install_deg, S, R, c_avg, r1, r2_sq,
+                         x_wing, rho, k_3d, k_clap):
+    """Numba标量版单翅气动力 — 返回 (Fz_body, Fx_body)."""
+    psi = phi + theta_p
+    Omega = phi_dot + theta_dot
+    abs_Omega = abs(Omega)
+    U = abs_Omega * R
+
+    # 俯仰气动阻尼
+    v_pitch = theta_dot * x_wing
+    if abs_Omega < 1e-6:
+        delta_alpha_deg = 0.0
+        delta_alpha_rad = 0.0
+    else:
+        delta_alpha_rad = np.arctan2(v_pitch, U)
+        delta_alpha_deg = delta_alpha_rad * 180.0 / np.pi
+
+    # 有效攻角
+    alpha_geom_rad = alpha_install_deg * np.pi / 180.0 + psi
+    if phi_dot <= 0.0:
+        alpha_eff_rad = alpha_geom_rad + delta_alpha_rad
+    else:
+        alpha_eff_rad = -(alpha_geom_rad + delta_alpha_rad)
+    alpha_eff_deg = alpha_eff_rad * 180.0 / np.pi
+
+    C_L, C_D = _cl_cd_blended_scalar(alpha_eff_deg)
+
+    # 平动力
+    const = 0.5 * rho * U * U * S * r2_sq * k_3d
+    if Omega <= 0.0:
+        sign_Omega = -1.0
+    else:
+        sign_Omega = 1.0
+    L_trans = const * C_L
+    D_trans = const * C_D
+
+    # 附加质量
+    if alpha_eff_rad > np.pi / 2.0:
+        alpha_eff_clamped = np.pi / 2.0
+    elif alpha_eff_rad < -np.pi / 2.0:
+        alpha_eff_clamped = -np.pi / 2.0
+    else:
+        alpha_eff_clamped = alpha_eff_rad
+    F_AM = -(rho * np.pi * c_avg * c_avg / 4.0) * phi_ddot * R * r1 * np.sin(alpha_eff_clamped)
+
+    # Clap-and-Fling
+    L_eff = (L_trans + F_AM) * k_clap
+    D_eff = D_trans * k_clap
+
+    # 体轴系力: Fx=前, Fz=上
+    Fx = np.sin(psi) * (sign_Omega * D_eff - L_eff)
+    Fz = np.cos(psi) * (L_eff - sign_Omega * D_eff)
+
+    if abs_Omega < 1e-6:
+        Fx = 0.0
+        Fz = 0.0
+
+    return Fz, Fx
+
+
+@njit(cache=True, fastmath=True)
+def _pitch_rhs_numba(theta_p, theta_dot,
+                      pf, pdf, pddf, pb, pdb, pddb,
+                      k_clap_f, k_clap_b,
+                      alpha_f_deg, alpha_b_deg,
+                      S_f, R_f, c_avg_f, r1_f, r2_sq_f,
+                      S_b, R_b, c_avg_b, r1_b, r2_sq_b,
+                      x_front, x_back,
+                      rho, k_3d,
+                      m_total, g, d_cg, I_yy, c_damp):
+    """Numba标量版俯仰ODE右端项 — 返回 (theta_ddot, Fx_total, Fz_total, M_aero)."""
+    # 前翅
+    Fz_f, Fx_f = _wing_forces_scalar(
+        pf, pdf, pddf, theta_p, theta_dot,
+        alpha_f_deg, S_f, R_f, c_avg_f, r1_f, r2_sq_f,
+        x_front, rho, k_3d, k_clap_f)
+
+    # 后翅
+    Fz_b, Fx_b = _wing_forces_scalar(
+        pb, pdb, pddb, theta_p, theta_dot,
+        alpha_b_deg, S_b, R_b, c_avg_b, r1_b, r2_sq_b,
+        x_back, rho, k_3d, k_clap_b)
+
+    # 左右对称 ×2
+    Fx_total = 2.0 * (Fx_f + Fx_b)
+    Fz_total = 2.0 * (Fz_f + Fz_b)
+    M_aero = 2.0 * (-x_front * Fz_f - x_back * Fz_b)
+
+    M_grav = -m_total * g * d_cg * np.sin(theta_p)
+    M_damp = -c_damp * theta_dot
+    theta_ddot = (M_aero + M_grav + M_damp) / I_yy
+
+    return theta_ddot, Fx_total, Fz_total, M_aero
+
+
+@njit(cache=True, fastmath=True)
+def _rk4_step_numba(tp, td, dt, pf, pdf, pddf, pb, pdb, pddb, kcl_f, kcl_b, *params):
+    """Numba标量版单步RK4 — 返回 (tp_new, td_new)."""
+    # k1
+    k1_tdd, _, _, _ = _pitch_rhs_numba(
+        tp, td, pf, pdf, pddf, pb, pdb, pddb, kcl_f, kcl_b, *params)
+
+    # k2
+    tp_k2 = tp + 0.5 * dt * td
+    td_k2 = td + 0.5 * dt * k1_tdd
+    k2_tdd, _, _, _ = _pitch_rhs_numba(
+        tp_k2, td_k2, pf, pdf, pddf, pb, pdb, pddb, kcl_f, kcl_b, *params)
+
+    # k3
+    tp_k3 = tp + 0.5 * dt * td_k2
+    td_k3 = td + 0.5 * dt * k2_tdd
+    k3_tdd, _, _, _ = _pitch_rhs_numba(
+        tp_k3, td_k3, pf, pdf, pddf, pb, pdb, pddb, kcl_f, kcl_b, *params)
+
+    # k4
+    tp_k4 = tp + dt * td_k3
+    td_k4 = td + dt * k3_tdd
+    k4_tdd, _, _, _ = _pitch_rhs_numba(
+        tp_k4, td_k4, pf, pdf, pddf, pb, pdb, pddb, kcl_f, kcl_b, *params)
+
+    tp_new = tp + dt * (td + 2.0 * td_k2 + 2.0 * td_k3 + td_k4) / 6.0
+    td_new = td + dt * (k1_tdd + 2.0 * k2_tdd + 2.0 * k3_tdd + k4_tdd) / 6.0
+
+    return tp_new, td_new
 
 
 # ============================================================
@@ -508,8 +681,12 @@ class ButterflyForceModel:
                         setattr(geo[k], attr, val)
         self.geo = geo
 
-    def simulate(self, progress: bool = True) -> SimulationOutput:
+    def simulate(self, progress: bool = True, use_numba: bool = True) -> SimulationOutput:
         """运行完整仿真: 运动学预计算 → RK4俯仰积分 → 力批处理.
+
+        Args:
+            progress: 打印进度信息.
+            use_numba: 启用 numba JIT 加速 RK4 热循环 (需安装 numba).
 
         Returns:
             SimulationOutput: 含所有时间序列的完整输出.
@@ -538,23 +715,46 @@ class ButterflyForceModel:
             t, t_ext_b, peb, pdb, pddb, phase_sec_b, Tb)
 
         # ---- RK4 俯仰积分 ----
+        use_nb = use_numba and _HAS_NUMBA
         if progress:
-            print(f"[ButterflyForceModel] RK4积分: t_end={cfg.t_end}s, dt={cfg.dt*1e6:.0f}us, steps={n_steps}")
+            backend = "numba" if use_nb else "Python"
+            print(f"[ButterflyForceModel] RK4积分({backend}): t_end={cfg.t_end}s, dt={cfg.dt*1e6:.0f}us, steps={n_steps}")
+
         tp = np.zeros(n_steps)
         tp[0] = np.deg2rad(cfg.theta0_deg)
         td = np.zeros(n_steps)
 
-        # 使用向量化 ODE 求值加速
-        # 先把运动学准备好 (scalar extraction 在每步进行)
         pf_arr = phi_f; pdf_arr = phi_dot_f; pddf_arr = phi_ddot_f
         pb_arr = phi_b; pdb_arr = phi_dot_b; pddb_arr = phi_ddot_b
 
-        for i in range(n_steps - 1):
-            tp[i+1], td[i+1] = _rk4_step_full(
-                tp[i], td[i], dt,
-                pf_arr[i], pdf_arr[i], pddf_arr[i],
-                pb_arr[i], pdb_arr[i], pddb_arr[i],
-                geo_f, geo_b, cfg)
+        if use_nb:
+            # ---- 预计算 k_clap 数组 ----
+            kcl_f = np.where(np.abs(pdf_arr) < 0.1 * np.max(np.abs(pdf_arr)), cfg.k_clap, 1.0)
+            kcl_b = np.where(np.abs(pdb_arr) < 0.1 * np.max(np.abs(pdb_arr)), cfg.k_clap, 1.0)
+
+            # ---- 打包 numba 参数 ----
+            nb_params = (
+                cfg.alpha_front_deg, cfg.alpha_back_deg,
+                geo_f.S, geo_f.R, geo_f.c_avg, geo_f.r1, geo_f.r2_sq,
+                geo_b.S, geo_b.R, geo_b.c_avg, geo_b.r1, geo_b.r2_sq,
+                cfg.x_front, cfg.x_back,
+                cfg.rho, cfg.k_3d,
+                cfg.m_total, cfg.g, cfg.d_cg, cfg.I_yy, cfg.c_damp,
+            )
+            for i in range(n_steps - 1):
+                tp[i+1], td[i+1] = _rk4_step_numba(
+                    tp[i], td[i], dt,
+                    pf_arr[i], pdf_arr[i], pddf_arr[i],
+                    pb_arr[i], pdb_arr[i], pddb_arr[i],
+                    kcl_f[i], kcl_b[i],
+                    *nb_params)
+        else:
+            for i in range(n_steps - 1):
+                tp[i+1], td[i+1] = _rk4_step_full(
+                    tp[i], td[i], dt,
+                    pf_arr[i], pdf_arr[i], pddf_arr[i],
+                    pb_arr[i], pdb_arr[i], pddb_arr[i],
+                    geo_f, geo_b, cfg)
 
         # ---- theta_ddot (后处理) ----
         tdd = np.zeros(n_steps)
