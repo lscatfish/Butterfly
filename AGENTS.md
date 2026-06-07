@@ -98,7 +98,10 @@ Fz = cos(ψ) × (L − sign×D)
 ```
 ├── src/
 │   ├── mechanism.py              # 曲柄摇杆四连杆 → φ(t), φ̇(t), φ̈(t)
-│   ├── butterfly_forces.py       # ★ 对外力输出模块 (v6.3+)
+│   ├── butterfly_forces.py       # ★ 对外力输出模块 (v6.3+, numba JIT v6.6)
+│   ├── stability_analysis.py     # 方案一: 单变量偏离扫描
+│   ├── stability_plot.py         # 方案一: 稳定性绘图
+│   ├── sweep_cartesian.py        # 方案二: 笛卡尔积全扫描 (joblib并行, v6.6)
 │   ├── dynamic_analysis.py       # 气动力仿真 (v3)
 │   ├── analyze_dxf.py            # DXF 几何提取 → 翅膀面积/展长/面积矩
 │   ├── alpha_scan.py             # 安装角扫描
@@ -122,10 +125,12 @@ Fz = cos(ψ) × (L − sign×D)
 │   ├── v6_moving_scan/           # v6 移动模型扫描结果图 (72 张)
 │   └── v61_long_stability/       # v6.1 10s 验证图 (4 张)
 ├── docs/
-│   ├── v6_3_CL_CD_formula.md     # v6.3 完整实验报告
-│   ├── v6_scan_report.md         # v6 初始扫描详细报告
-│   ├── v6_experiment_conclusions.md  # v6-v6.2 实验总结
-│   └── v6_summary_and_roadmap.md # 路线图
+│   ├── v6_3_CL_CD_formula.md          # v6.3 完整实验报告
+│   ├── v6_5_stability_sweep_report.md # 方案一: 6参数单变量扫描报告
+│   ├── v6_6_cartesian_sweep_report.md # 方案二: 9参数全笛卡尔积扫描报告
+│   ├── v6_scan_report.md              # v6 初始扫描详细报告
+│   ├── v6_experiment_conclusions.md   # v6-v6.2 实验总结
+│   └── v6_summary_and_roadmap.md      # 路线图
 └── AGENTS.md                     # 本文件
 ```
 
@@ -162,6 +167,23 @@ analysis (stability_analysis.py) ──[JSON+NPZ]──> plot (stability_plot.py
 - **v6.5 基线**: α_f=68/α_b=5, phase=-15, a=6.0, R=2.5, φ_offset=-50.84 (L/W_world=2.505)
 - **方案一扫描**: 6参数共48组，全部完成 (41.4 min)。详细报告见 `docs/v6_5_stability_sweep_report.md`
 
+### v6.6 方案二: 9参数全笛卡尔积扫描
+
+`src/sweep_cartesian.py` — joblib 并行 + numba JIT 全组合扫描:
+
+```
+sweep_cartesian.py
+  ├─ build_cartesian_grid(grid_spec) → [{param: value}, ...]
+  ├─ combo_to_id(combo) → "af60_ab5_phn20_a6_R3_..."
+  ├─ run_one_combo(combo) → 保存 {config,summary,timeseries}
+  └─ sweep_cartesian(grid_spec, n_jobs=-1) → sweep_summary.json
+```
+
+- **3456 组** 9 参数粗网格全扫描，56.7 min (16 核, numba 4.8×)
+- **最佳 L/W = 12.625** (基线 2.505 的 5.0×): α_f=60°, α_b=5°, phase=-20°, a=6, R=3.0, φ_off=-30, f=17, cd=5e-4, rot=cw
+- 输出与方案一完全兼容 (config/summary/timeseries)，绘图模块可复用
+- 详细报告见 `docs/v6_6_cartesian_sweep_report.md`
+
 ### v6.5 方案一关键发现
 
 | 参数 | 敏感度 | 趋势 | 最优(L/W) |
@@ -191,12 +213,15 @@ python src/stability_plot.py --all
 
 ### TODO
 
-- [ ] **numba JIT 加速**: RK4 热循环 numba 编译 + multiprocessing 并行参数扫描 — 预期 5-10x 单仿真加速，729组粗筛 ~10分钟
-- [ ] **方案二: 全参数笛卡尔积扫描** — 6参数粗网格全扫描 (3³×...), 在最优区域精化
+- [x] **numba JIT 加速** ✅ — 标量 @njit 编译 RK4 热循环, 4.8× 单仿真加速 (v6.6)
+- [x] **方案二: 全参数笛卡尔积扫描** ✅ — 9参数 3456 组, 16核 joblib, 56.7 min (v6.6)
+- [ ] **方案二绘图** — 交互热力图、平行坐标图、Sobol 敏感性指数
+- [ ] **精化扫描** — a=5-7mm (步长 0.25), f=17-22Hz, R=2.75-3.25, phase=-25°~-12° 加密
 - [ ] φ_offset 扩展扫描 (-30° 到 0°) — 趋势显示越正越好，需确认最优上界
 - [ ] R 临界值精密扫描 (3.0-3.5mm, 步长 0.05mm) — 确定稳定性峭壁
-- [ ] 用扫描结果更新默认参数和推荐配置
+- [x] 用扫描结果更新默认参数和推荐配置 ✅ — DESIGN_v66: R=2.25/a=6 设计参数 (v6.6)
 - [ ] 写入 `stability_analysis.py` 的 `sweep_all()` 方法
+- [ ] **清理发散组数据** — 2,645 组 timeseries.npz 可回收 ~60GB
 
 ## Key Parameters
 
@@ -204,6 +229,17 @@ python src/stability_plot.py --all
 # v6.5 基线 (L/W_world=2.505, Fz_world=+460mN, peak θ=58.1°, 5s稳定)
 BASE = {"alpha_front_deg":68, "alpha_back_deg":5, "phase_diff_deg":-15,
         "mech_a":6.0, "mech_R":2.5, "phi_offset_deg":-50.84}
+
+# v6.6 最优 (L/W_world=12.625, Fz_world=+2459mN, peak θ=35.1°, 5s稳定)
+BEST_v66 = {"alpha_front_deg":60, "alpha_back_deg":5, "phase_diff_deg":-20,
+            "mech_a":6, "mech_R":3.0, "phi_offset_deg":-30,
+            "f":17, "c_damp":5e-4, "rotation":"cw"}
+
+# v6.6 设计参数 (L/W_world=2.885, Fz_world=+566mN, peak θ=50.1°, 5s稳定)
+# 机构默认 R=2.25mm, a=6mm, 其他参数采用 v6.6 扫描最优
+DESIGN_v66 = {"alpha_front_deg":60, "alpha_back_deg":5, "phase_diff_deg":-20,
+              "mech_a":6, "mech_R":2.25, "phi_offset_deg":-30,
+              "f":17, "c_damp":5e-4, "rotation":"cw"}
 
 # v6.5 单参数最优 (L/W_world)
 # a=5.0 → 8.246 | R=3.0 → 6.734 | φ_off=-30° → 3.728 | phase=-15° → 2.505
@@ -214,9 +250,10 @@ BASE = {"alpha_front_deg":68, "alpha_back_deg":5, "phase_diff_deg":-15,
 PHYS = {"rho":1.225, "g":9.81, "m_total":0.020, "I_yy":3e-5,
         "x_front":0.025, "x_back":-0.025, "d_cg":0.015, "c_damp":5e-4}
 
-MECH = {"a":7.92, "b":6.97, "R":2.25, "c":14.00, "l":8.00,
-        "phi_offset_deg":-50.84, "f":15.0, "rotation":"cw"}
+MECH = {"a":6.0, "b":6.97, "R":2.25, "c":14.00, "l":8.00,
+        "phi_offset_deg":-30, "f":17.0, "rotation":"cw"}
 # 偏移后 φ ∈ [-22.2°, +22.2°], 急回: 下拍 57%/上拍 43%
+# v6.6 设计参数: a=6, R=2.25 (默认), f=17Hz, φ_off=-30°, cw
 
 WING_FRONT = {"S":0.01617, "R":0.1543, "c_avg":0.1048, "r1":0.4227, "r2_sq":0.2382}
 WING_BACK  = {"S":0.01554, "R":0.1474, "c_avg":0.1054, "r1":0.4798, "r2_sq":0.2876}
