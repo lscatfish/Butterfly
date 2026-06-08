@@ -948,9 +948,9 @@ if __name__ == "__main__":
     print("=" * 70)
 
     # Test 1: 基线参数快速验证 (v6.7 文献修正, 3s, 50us)
-    print("\n--- Test 1: 基线参数 (α_f=65/α_b=12, t=3s) ---")
+    print("\n--- Test 1: 基线参数 (α_f=60/α_b=10, t=3s) ---")
     cfg1 = SimulationConfig(
-        alpha_front_deg=65, alpha_back_deg=12,
+        alpha_front_deg=60, alpha_back_deg=10,
         phase_diff_deg=-20, mech_a=6, mech_R=2.25,
         phi_offset_deg=-30, f=17, c_damp=5e-4, rotation='cw',
         t_end=3.0, dt=50e-6, theta0_deg=0.0,
@@ -971,7 +971,7 @@ if __name__ == "__main__":
     # Test 2: 相位差影响
     print("\n--- Test 2: 相位差 -10° ---")
     cfg2 = SimulationConfig(
-        alpha_front_deg=65, alpha_back_deg=12,
+        alpha_front_deg=60, alpha_back_deg=10,
         phase_diff_deg=-10,
         mech_a=6, mech_R=2.25, phi_offset_deg=-30,
         f=17, c_damp=5e-4, rotation='cw',

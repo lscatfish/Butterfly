@@ -42,7 +42,7 @@ OUT_ROOT = _PROJ / "temp" / "stability" / "sweep_cartesian"
 # v6.7 基线参数 — 攻角公式修正为文献[32]标准 (α=η相对拍动平面)
 # ============================================================
 BASELINE_CONFIG = dict(
-    alpha_front_deg=65, alpha_back_deg=12,
+    alpha_front_deg=60, alpha_back_deg=10,
     phase_diff_deg=-20, mech_a=6.0, mech_R=2.25,
     phi_offset_deg=-30, rotation='cw',
     f=17.0, rho=1.225, m_total=0.020, I_yy=3e-5, d_cg=0.015,
