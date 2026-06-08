@@ -23,6 +23,7 @@ __pycache__/
 !/output/figures/
 !/output/tables/
 !/output/reports/
+/蝴蝶20260305/
 
 # JSON data files (not tracked)
 *.json
@@ -37,4 +38,3 @@ __pycache__/
 # Stability sweep data (large NPZ files, generated)
 temp/stability/sweep_*/
 temp/stability/figures/sweep_*/
-
