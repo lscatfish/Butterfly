@@ -25,8 +25,6 @@
 | 60° | 10° | 0.903 | 0.993 | 45.0° | 0 | +195 mN | ✅ |
 | 60° | 12° | 0.859 | 0.948 | 43.1° | 0 | +186 mN | ✅ |
 
-详细记录见 `docs/v6_3_CL_CD_formula.md`，完整扫描数据见 `data/v63_scan_results.json`
-
 ### 对外力输出模块: `src/butterfly_forces.py`
 
 对外调用接口，提供完整仿真管线（运动学→俯仰ODE→力输出），**全参数可配置**：
@@ -109,8 +107,7 @@ Fz = cos(ψ) × (L − sign×D)
 │   └── gear_analysis.py          # 齿轮减速比分析
 ├── data/
 │   ├── WingFront.DXF / WingBack.DXF / WingsAxis.DXF
-│   ├── wing_analysis_results.json
-│   └── v63_scan_results.json     # v6.3 99组扫描完整数据
+│   └── wing_analysis_results.json
 ├── temp/
 │   ├── pitch_dynamics_v6_1.py    # v6.1-v6.3 物理引擎 (历史)
 │   ├── scan_v6_3.py              # v6.3 99组扫描脚本
@@ -119,12 +116,8 @@ Fz = cos(ψ) × (L − sign×D)
 │   ├── v63_long/ v6_fixed_scan/ v6_moving_scan/ v61_long_stability/
 │   └── stability/                # ☆ 扫参输出 (旧bug公式数据已废弃, 可清)
 ├── docs/
-│   ├── 仿生蝴蝶翅膀空气动力学分析文献综述.md  # ★ 文献综述 (公式来源)
-│   ├── v6_3_CL_CD_formula.md              # v6.3 实验报告
-│   ├── v6_4_optimization_report.md        # v6.4 优化报告
-│   ├── v6_5_stability_sweep_report.md     # 方案一报告
-│   ├── v6_6_cartesian_sweep_report.md     # 方案二报告 (bug公式, 仅供历史参考)
-│   ├── butterfly_forces_使用说明.md       # 模块 API 文档
+│   ├── 仿生蝴蝶翅膀空气动力学分析文献综述.md  # ★ 文献综述 (公式来源, [11][24][32])
+│   ├── butterfly_forces_使用说明.md       # 模块 API 文档 (v6.7)
 │   ├── mechanism.md / mechanism_plot.md   # 机构文档
 │   ├── analyze_dxf.md / gear_analysis.md  # 分析工具文档
 └── AGENTS.md                     # 本文件
