@@ -223,31 +223,26 @@ def _wing_forces_scalar(phi, phi_dot, phi_ddot, theta_p, theta_dot,
     abs_Omega = abs(Omega)
     U = abs_Omega * R
 
-    # 俯仰气动阻尼
+    # 俯仰气动阻尼: Δα = atan(θ̇_p·x_wing / U)
+    # U≈0时Δα可达±90°, 但此时F_trans∝U²≈0, 瞬态大攻角无实际力贡献
     v_pitch = theta_dot * x_wing
     if abs_Omega < 1e-6:
-        delta_alpha_deg = 0.0
         delta_alpha_rad = 0.0
     else:
         delta_alpha_rad = np.arctan2(v_pitch, U)
-        delta_alpha_deg = delta_alpha_rad * 180.0 / np.pi
 
-    # 有效攻角
-    alpha_geom_rad = alpha_install_deg * np.pi / 180.0 + psi
-    if phi_dot <= 0.0:
-        alpha_eff_rad = alpha_geom_rad + delta_alpha_rad
-    else:
-        alpha_eff_rad = -(alpha_geom_rad + delta_alpha_rad)
+    # 有效攻角：翅膀弦线相对拍动平面(体轴XZ平面)的角度
+    # η = α_install (文献[32]: α=η下拍, α=π-η上拍)
+    # θ_p 使拍动平面整体倾斜, 通过力投影和重力矩体现, 不进入气动攻角
+    eta_rad = alpha_install_deg * np.pi / 180.0
+    sign_smooth = np.tanh(phi_dot / 2.0)
+    alpha_eff_rad = -sign_smooth * (eta_rad + delta_alpha_rad)
     alpha_eff_deg = alpha_eff_rad * 180.0 / np.pi
 
     C_L, C_D = _cl_cd_blended_scalar(alpha_eff_deg)
 
     # 平动力
     const = 0.5 * rho * U * U * S * r2_sq * k_3d
-    if Omega <= 0.0:
-        sign_Omega = -1.0
-    else:
-        sign_Omega = 1.0
     L_trans = const * C_L
     D_trans = const * C_D
 
@@ -265,6 +260,8 @@ def _wing_forces_scalar(phi, phi_dot, phi_ddot, theta_p, theta_dot,
     D_eff = D_trans * k_clap
 
     # 体轴系力: Fx=前, Fz=上
+    # sign_Omega 用 tanh 平滑过渡, 避免拍动反转时力跳变
+    sign_Omega = np.tanh(Omega / 2.0)
     Fx = np.sin(psi) * (sign_Omega * D_eff - L_eff)
     Fz = np.cos(psi) * (L_eff - sign_Omega * D_eff)
 
@@ -421,27 +418,24 @@ def compute_wing_forces_vec(phi, phi_dot, phi_ddot, theta_p, theta_dot,
     Omega = phi_dot + theta_dot
     U = np.abs(Omega) * geo.R
 
-    # 俯仰气动阻尼
+    # 俯仰气动阻尼: Δα = atan(θ̇_p·x_wing / U)
+    # U≈0时Δα可达±90°, 但此时F_trans∝U²≈0, 瞬态大攻角无实际力贡献
     v_pitch = theta_dot * x_wing
     with np.errstate(divide='ignore', invalid='ignore'):
         delta_alpha_rad = np.arctan2(v_pitch, U + 1e-6)
-    delta_alpha_deg = np.rad2deg(delta_alpha_rad)
 
-    # 有效攻角
-    alpha_geom_rad = np.deg2rad(alpha_install_deg) + psi
-    mask_down = phi_dot <= 0
-    alpha_eff_rad = np.where(
-        mask_down,
-        alpha_geom_rad + delta_alpha_rad,
-        -(alpha_geom_rad + delta_alpha_rad),
-    )
+    # 有效攻角：翅膀弦线相对拍动平面(体轴XZ平面)的角度
+    # η = α_install (文献[32]: α=η下拍, α=π-η上拍)
+    eta_rad = np.deg2rad(alpha_install_deg)
+    sign_smooth = np.tanh(phi_dot / 2.0)
+    alpha_eff_rad = -sign_smooth * (eta_rad + delta_alpha_rad)
     alpha_eff_deg = np.rad2deg(alpha_eff_rad)
 
     C_L, C_D = cl_cd_blended(alpha_eff_deg)
 
     # 平动力
     const = 0.5 * config.rho * U**2 * geo.S * geo.r2_sq * config.k_3d
-    sign_Omega = np.where(Omega <= 0, -1.0, 1.0)
+    sign_Omega = np.tanh(Omega / 2.0)
     L_trans = const * C_L
     D_trans = const * C_D
 
@@ -953,16 +947,19 @@ if __name__ == "__main__":
     print("butterfly_forces.py — 验证测试")
     print("=" * 70)
 
-    # Test 1: 默认参数快速验证 (3s, 50us)
-    print("\n--- Test 1: 默认参数 (α_f=60/α_b=8, t=3s, dt=50us) ---")
+    # Test 1: 基线参数快速验证 (v6.7 文献修正, 3s, 50us)
+    print("\n--- Test 1: 基线参数 (α_f=65/α_b=12, t=3s) ---")
     cfg1 = SimulationConfig(
-        alpha_front_deg=60, alpha_back_deg=8,
+        alpha_front_deg=65, alpha_back_deg=12,
+        phase_diff_deg=-20, mech_a=6, mech_R=2.25,
+        phi_offset_deg=-30, f=17, c_damp=5e-4, rotation='cw',
         t_end=3.0, dt=50e-6, theta0_deg=0.0,
     )
     m1 = ButterflyForceModel(cfg1)
     out1 = m1.simulate(progress=True)
     s1 = out1.summary
-    print(f"  L/W={s1['L/W']:.3f} (expected 0.943) | peak={s1['peak_theta_deg']:.1f}° | n90={s1['n_exceed_90']}")
+    print(f"  L/W={s1['L/W']:.3f} (expected >1.5) | peak={s1['peak_theta_deg']:.1f}° | n90={s1['n_exceed_90']}")
+    print(f"  α_eff FL: [{np.min(out1.wings['FL'].alpha_eff_deg):.0f}°, {np.max(out1.wings['FL'].alpha_eff_deg):.0f}°]")
     print(f"  Fz_body={s1['avg_Fz_body_mN']:+.0f}mN | Fz_world={s1['avg_Fz_world_mN']:+.0f}mN | weight={s1['weight_mN']:.0f}mN")
     print(f"  Wings: {list(out1.wings.keys())}")
     for name, wo in out1.wings.items():
@@ -971,22 +968,27 @@ if __name__ == "__main__":
               f"rocker_pv_max={np.max(np.abs(wo.rocker_principal_vec)):.4f}N  "
               f"rocker_pm_max={np.max(np.abs(wo.rocker_principal_moment)):.6f}N·m")
 
-    # Test 2: 相位差
-    print("\n--- Test 2: 相位差 90° ---")
+    # Test 2: 相位差影响
+    print("\n--- Test 2: 相位差 -10° ---")
     cfg2 = SimulationConfig(
-        alpha_front_deg=60, alpha_back_deg=8,
-        phase_diff_deg=90.0,
+        alpha_front_deg=65, alpha_back_deg=12,
+        phase_diff_deg=-10,
+        mech_a=6, mech_R=2.25, phi_offset_deg=-30,
+        f=17, c_damp=5e-4, rotation='cw',
         t_end=1.0, dt=50e-6,
     )
     m2 = ButterflyForceModel(cfg2)
     out2 = m2.simulate(progress=True)
     print(f"  L/W={out2.summary['L/W']:.3f} | peak={out2.summary['peak_theta_deg']:.1f}°")
 
-    # Test 3: 参数扫描 (小范围)
-    print("\n--- Test 3: 小范围扫描 ---")
+    # Test 3: α_f 小范围扫描
+    print("\n--- Test 3: α_f/α_b 扫描 ---")
     results = scan_parameters(
-        SimulationConfig(),
-        {"alpha_front_deg": [55, 60], "alpha_back_deg": [8, 10]},
+        SimulationConfig(
+            phase_diff_deg=-20, mech_a=6, mech_R=2.25,
+            phi_offset_deg=-30, f=17, c_damp=5e-4, rotation='cw',
+        ),
+        {"alpha_front_deg": [55, 60, 65], "alpha_back_deg": [8, 10, 12]},
         t_end=3.0, dt=50e-6, progress=True,
     )
     print(f"\n  Top results:")

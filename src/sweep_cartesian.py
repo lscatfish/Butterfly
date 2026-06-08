@@ -39,13 +39,13 @@ except ImportError:
 OUT_ROOT = _PROJ / "temp" / "stability" / "sweep_cartesian"
 
 # ============================================================
-# v6.5 基线参数 — 与 stability_analysis.BASELINE_CONFIG 一致
+# v6.7 基线参数 — 攻角公式修正为文献[32]标准 (α=η相对拍动平面)
 # ============================================================
 BASELINE_CONFIG = dict(
-    alpha_front_deg=68, alpha_back_deg=5,
-    phase_diff_deg=-15, mech_a=6.0, mech_R=2.5,
-    phi_offset_deg=-50.84, rotation='cw',
-    f=15.0, rho=1.225, m_total=0.020, I_yy=3e-5, d_cg=0.015,
+    alpha_front_deg=65, alpha_back_deg=12,
+    phase_diff_deg=-20, mech_a=6.0, mech_R=2.25,
+    phi_offset_deg=-30, rotation='cw',
+    f=17.0, rho=1.225, m_total=0.020, I_yy=3e-5, d_cg=0.015,
     x_front=0.025, x_back=-0.025,
     dt=50e-6, t_end=5.0, theta0_deg=0.0, steady_start=3.0,
     k_3d=0.7, C_rot=1.5, r_rot=0.5, k_clap=1.3, c_damp=5e-4,
@@ -55,16 +55,18 @@ BASELINE_CONFIG = dict(
 # 缺省笛卡尔积网格 — 9 参数粗网格 (2×2×2×4×3×3×3×2×2 = 3456 组)
 # 编辑此字典即可自定义扫描范围和分辨率
 # ============================================================
+# v6.7: 攻角公式修正为文献[32]标准 (α=η相对拍动平面, 上下拍符号翻转)
+# 稳定窗: α_f≥52°, α_b匹配决定稳定性; a仅6mm可行; cw必须
 DEFAULT_GRID = {
-    "alpha_front_deg":  [60, 68],
-    "alpha_back_deg":   [3, 5],
-    "phase_diff_deg":   [-20, -10],
-    "mech_a":           [6, 8, 10, 12],
-    "mech_R":           [2.5, 3.0, 3.25],
-    "phi_offset_deg":   [-50, -40, -30],
+    "alpha_front_deg":  [55, 60, 65, 68],
+    "alpha_back_deg":   [3, 5, 8, 10, 12],
+    "phase_diff_deg":   [-25, -20, -15, -10],
+    "mech_a":           [6, 7, 7.5, 8],
+    "mech_R":           [2.0, 2.25, 2.5, 2.75],
+    "phi_offset_deg":   [-40, -35, -30, -25],
     "f":                [13, 15, 17],
     "c_damp":           [1e-4, 5e-4],
-    "rotation":         ["cw", "ccw"],
+    "rotation":         ["cw"],
 }
 
 PARAM_SHORT = {
