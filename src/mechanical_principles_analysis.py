@@ -159,7 +159,7 @@ def four_wing_series(front: dict, back: dict) -> dict:
 def compute_results() -> dict:
     cfg = SimulationConfig(
         alpha_front_deg=60.0,
-        alpha_back_deg=5.0,
+        alpha_back_deg=10.0,
         phase_diff_deg=-20.0,
         mech_a=6.0,
         mech_R=2.25,
@@ -822,7 +822,7 @@ def plot_output_torque_time(results: dict) -> Path:
 
 
 def plot_crank_rocker_reference_crops() -> dict[str, Path]:
-    src = PROJECT_ROOT / "曲柄摇杆受力简图.png"
+    src = FIG_DIR / "曲柄摇杆受力简图.png"
     paths = {
         "mechanism": FIG_DIR / "crank_rocker_reference.png",
         "fbd": FIG_DIR / "crank_rocker_fbd_reference.png",
@@ -849,7 +849,7 @@ def plot_crank_rocker_reference_crops() -> dict[str, Path]:
 
 
 def plot_mechanism_schematic_reference() -> Path | None:
-    src = PROJECT_ROOT / "机构简图.png"
+    src = FIG_DIR / "机构简图.png"
     if not src.exists():
         return None
     path = FIG_DIR / "mechanism_schematic_reference.png"
