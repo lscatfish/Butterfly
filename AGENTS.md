@@ -263,9 +263,84 @@ python src/stability_plot.py --all
 - [x] **攻角公式修正** ✅ — 文献[32]标准: α=η (相对拍动平面), tanh平滑 (v6.7)
 - [x] 用扫描结果更新默认参数和推荐配置 ✅ — DESIGN_v67 (v6.7)
 - [ ] **清理 v6.6 废弃数据** — `temp/stability/sweep_cartesian/` 82GB 基于 bug 公式, 可全删
-- [ ] **v6.7 全参数扫描** — 基于修正公式重跑笛卡尔积扫参
+- [ ] **v6.8 Clap-and-Fling 物理模型修正** — 见下方计划
+- [ ] **v6.8 设计参数重扫描** — 新 clap-fling 模型下 α_f, α_b 最优值会变
 - [ ] **方案二绘图** — 交互热力图、平行坐标图、Sobol 敏感性指数
-- [ ] **精化扫描** — a=5-7mm (步长 0.25), f=17-22Hz, phase=-25°~-12° 加密
+
+---
+
+## v6.8 Plan: Clap-and-Fling 速度耦合修正
+
+### 问题
+
+当前实现 (`butterfly_forces.py:452-453`):
+```python
+in_reversal = np.abs(phi_dot) < 0.1 * phi_dot_peak
+k_clap = np.where(in_reversal, config.k_clap, 1.0)
+```
+
+三个缺陷：
+1. **硬二值开关**: k_clap 在阈值处瞬间跳变 30%，曲线出现 kink
+2. **速度判据倒置**: 在 |φ̇|≈0 处增强 30%，但此时气动力∝U²≈0，增强几乎无实际作用
+3. **非物理**: 文献[36-39] 明确 clap-and-fling 增强来自张开速度产生的额外环量
+
+### 文献依据
+
+Lighthill(1973) 环量公式: Γ = g(λ)·φ̇·c²
+
+- Γ: 额外环量，正比于**张开角速度 φ̇**
+- g(λ) ≈ 2 (张开角 < 30°)，随翅间距增大而衰减
+- 粘性修正 (Maxworthy 1979): Γ ≈ 6Ωc² (8.7× 增强)
+
+物理本质: 两翅分离时，间隙中的射流产生额外环量。**速度越快、翅越近，增强越强**。
+
+### 实现方案
+
+将 clap-and-fling 建模为对 C_L/C_D 的速度-位置耦合增强：
+
+```
+k_clap_extra = k_max · (|φ̇| / φ̇_peak) · window(φ)
+k_clap = 1.0 + k_clap_extra
+```
+
+- **k_max**: 最大增强系数 (待标定，初始 ~0.5, 使平均 L/W 增加 ~30%)
+- **|φ̇|/φ̇_peak**: 速度归一化 — 端点处 φ̇→0, 增强自然归零
+- **window(φ)**: 位置余弦平方窗 — 翅越靠近端点, 左右翅间距越小, 增强越强
+  - edge_width = 0.10 (端点 10% 拍动范围内激活, ~5.6°)
+  - 余弦平方平滑过渡, 无硬开关
+
+预期效果:
+- 增强峰值出现在**端点附近且速度尚存**的位置 (而非端点处)
+- 与位置窗对比: 增强作用于速度>0 的区域, 真正参与动力学
+- 需要重新标定 k_max 使平均增强匹配文献的 ~30%
+
+### 涉及修改
+
+| 文件 | 修改内容 |
+|------|---------|
+| `src/butterfly_forces.py` | ① 新增 `compute_clap_fling_window()` 辅助函数 |
+| | ② `compute_wing_forces_vec` 中替换 k_clap 计算 |
+| | ③ 预计算 k_clap 数组 (numa + Python 两路径) |
+| | ④ `SimulationConfig.k_clap` 语义变为 k_max |
+| `src/stability_analysis.py` | BASELINE_CONFIG 参数不变 (k_clap 仍为初始值) |
+| `src/sweep_cartesian.py` | BASELINE_CONFIG 同步 |
+| `AGENTS.md` | 更新模型描述 + DESIGN 参数 |
+
+### 参数重扫描
+
+新 clap-fling 模型下，最优 α_f/α_b 会偏移，需要:
+
+1. **粗扫**: α_f=[50,55,60,65,68,70], α_b=[3,5,8,10,12,15,18] → 找新峰值区
+2. **精扫**: 在峰值区加密 (步长 2°)
+3. **更新 DESIGN_v68**: 新最优参数写入 AGENTS.md + 所有 BASELINE_CONFIG
+
+### 验证标准
+
+- [ ] 力/力矩曲线无 kink
+- [ ] k_clap 在端点处 = 1.0 (速度→0, 增强归零)
+- [ ] 平均 L/W 在合理范围 (1.5-3.0)
+- [ ] 俯仰稳定 (peak θ < 90°, n90=0)
+- [ ] 新 DESIGN 参数 L/W ≥ 当前 DESIGN_v67 的 2.15
 
 ## Key Parameters
 
