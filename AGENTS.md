@@ -5,7 +5,7 @@
 
 ## Current State (2026-06-05)
 
-**当前主力模型：v6.3** — 刚性翅膀 + 非对称 α_install + 气动俯仰阻尼 + LEV/Lee C_L/C_D 理论公式
+**当前主力模型：v6.7** — 文献[32]标准攻角定义 + tanh平滑过渡 + numba JIT
 
 ### 版本演进
 
@@ -14,7 +14,8 @@
 | v6 | `temp/pitch_dynamics_v6.py` | 刚性 wing, 非对称 α_install 扫描 | L/W=1.48 但俯仰全部发散 |
 | v6.1 | `temp/pitch_dynamics_v6_1.py` | +气动俯仰阻尼 Δα(θ̇_p) | L/W=1.145, 10s 全稳定, 但全在平板区 |
 | v6.2 | `temp/scan_low_alpha.py` | +低 α_install (28-45°) | L/W=0.615, LEV 范围, 64 组全稳定 |
-| **v6.3** | `src/butterfly_forces.py` | +LEV/Lee C_L/C_D (C_D_max=3.22) | **L/W=1.033**, 10s STABLE, 达悬停条件 ✅ |
+| v6.3 | `src/butterfly_forces.py` | +LEV/Lee C_L/C_D (C_D_max=3.22) | **L/W=1.033**, 10s STABLE, 达悬停条件 ✅ |
+| **v6.7** | `src/butterfly_forces.py` | **修正攻角定义**[32]: α=η (相对拍动平面) + tanh平滑过渡 | **L/W=2.15**, peak θ=37.6°, 物理自洽 ✅ |
 
 ### 最佳参数 (v6.3)
 
@@ -98,10 +99,10 @@ Fz = cos(ψ) × (L − sign×D)
 ```
 ├── src/
 │   ├── mechanism.py              # 曲柄摇杆四连杆 → φ(t), φ̇(t), φ̈(t)
-│   ├── butterfly_forces.py       # ★ 对外力输出模块 (v6.3+, numba JIT v6.6)
+│   ├── butterfly_forces.py       # ★ 对外力输出模块 (v6.3+, v6.7攻角修正)
 │   ├── stability_analysis.py     # 方案一: 单变量偏离扫描
 │   ├── stability_plot.py         # 方案一: 稳定性绘图
-│   ├── sweep_cartesian.py        # 方案二: 笛卡尔积全扫描 (joblib并行, v6.6)
+│   ├── sweep_cartesian.py        # 方案二: 笛卡尔积全扫描 (joblib并行)
 │   ├── dynamic_analysis.py       # 气动力仿真 (v3)
 │   ├── analyze_dxf.py            # DXF 几何提取 → 翅膀面积/展长/面积矩
 │   ├── alpha_scan.py             # 安装角扫描
@@ -111,26 +112,21 @@ Fz = cos(ψ) × (L − sign×D)
 │   ├── wing_analysis_results.json
 │   └── v63_scan_results.json     # v6.3 99组扫描完整数据
 ├── temp/
-│   ├── pitch_dynamics_v6_1.py    # v6.1 物理引擎 (v6.2/v6.3 共用)
+│   ├── pitch_dynamics_v6_1.py    # v6.1-v6.3 物理引擎 (历史)
 │   ├── scan_v6_3.py              # v6.3 99组扫描脚本
 │   ├── verify_v63_long.py        # v6.3 10s长稳验证
-│   ├── scan_low_alpha.py         # v6.2 低 α LEV 范围扫描
-│   ├── verify_long_stability.py  # v6.1 10s长稳验证
-│   ├── diagnose_pitch.py         # 俯仰发散根因诊断
-│   ├── diagnose_upstroke.py      # 上拍攻角 & 公式使用分析
-│   ├── plot_pitch_rate.py        # pitch rate 时程图
-│   ├── debug_*.py                # 调试脚本
-│   ├── v63_long/                 # v6.3 10s 验证图 (6+3 张)
-│   ├── v6_fixed_scan/            # v6 固定点扫描结果图 (60 张)
-│   ├── v6_moving_scan/           # v6 移动模型扫描结果图 (72 张)
-│   └── v61_long_stability/       # v6.1 10s 验证图 (4 张)
+│   ├── discover_stable/          # v6 偏离发现脚本
+│   ├── v63_long/ v6_fixed_scan/ v6_moving_scan/ v61_long_stability/
+│   └── stability/                # ☆ 扫参输出 (旧bug公式数据已废弃, 可清)
 ├── docs/
-│   ├── v6_3_CL_CD_formula.md          # v6.3 完整实验报告
-│   ├── v6_5_stability_sweep_report.md # 方案一: 6参数单变量扫描报告
-│   ├── v6_6_cartesian_sweep_report.md # 方案二: 9参数全笛卡尔积扫描报告
-│   ├── v6_scan_report.md              # v6 初始扫描详细报告
-│   ├── v6_experiment_conclusions.md   # v6-v6.2 实验总结
-│   └── v6_summary_and_roadmap.md      # 路线图
+│   ├── 仿生蝴蝶翅膀空气动力学分析文献综述.md  # ★ 文献综述 (公式来源)
+│   ├── v6_3_CL_CD_formula.md              # v6.3 实验报告
+│   ├── v6_4_optimization_report.md        # v6.4 优化报告
+│   ├── v6_5_stability_sweep_report.md     # 方案一报告
+│   ├── v6_6_cartesian_sweep_report.md     # 方案二报告 (bug公式, 仅供历史参考)
+│   ├── butterfly_forces_使用说明.md       # 模块 API 文档
+│   ├── mechanism.md / mechanism_plot.md   # 机构文档
+│   ├── analyze_dxf.md / gear_analysis.md  # 分析工具文档
 └── AGENTS.md                     # 本文件
 ```
 
@@ -149,6 +145,62 @@ Fz = cos(ψ) × (L − sign×D)
 - 在 `butterfly_forces.py` 中添加 `simulate_moving()` 方法或通过 `SimulationConfig.mode='moving'` 切换
 - 扫描 Vx 稳定解（预期 Vx 稳态 ≈ 3-5 m/s）
 - 验证 moving 模型下的 L/W 是否进一步提升
+
+## v6.7 攻角公式修正 (2026-06-08)
+
+### Bug 根因
+
+v6.3-v6.6 的攻角定义有误：
+```
+α_geom = α_install + φ + θ_p    ← 错误！φ 是拍动位置，不应进入攻角
+```
+
+文献[32]标准定义：攻角 = 翅膀弦线相对**拍动平面**（体轴 XZ 平面）的角度。拍动平面随 body 整体倾斜，θ_p 影响的是力投影方向而非攻角本身。
+
+### 修正
+
+```
+α_eff = -tanh(φ̇) · (α_install + δα)
+```
+
+- **η = α_install**：翅膀相对拍动平面的安装角（不含 φ、不含 θ_p）
+- **-tanh(φ̇)**：平滑符号翻转（上下拍来流方向相反）
+- **δα = atan2(θ̇_p·x_wing, |Ω|·R)**：俯仰气动阻尼
+- **sign_Ω = tanh(Ω)**：阻力体轴投影平滑过渡
+
+### 设计参数 (v6.7)
+
+```python
+DESIGN_v67 = {
+    "alpha_front_deg": 60,    # 前翅安装角 (Dickinson CL峰值区)
+    "alpha_back_deg": 10,     # 后翅安装角
+    "phase_diff_deg": -20,    # 前后翅相位差
+    "mech_a": 6,              # 曲柄半径 [mm]
+    "mech_R": 2.25,           # 摇杆半径 [mm] (机构默认)
+    "phi_offset_deg": -30,    # 翅膀安装偏角
+    "f": 17,                  # 拍动频率 [Hz]
+    "c_damp": 5e-4,           # 俯仰阻尼 [N·m·s/rad]
+    "rotation": "cw",         # 曲柄转向 (ccw不可行)
+}
+# L/W_world=2.15, Fz_world=+422mN, peak θ=37.6°, pitch=15~27°, 5s稳定
+```
+
+### 修正效果对比
+
+| 指标 | v6.6 (Bug) | v6.7 (修正) |
+|------|-----------|------------|
+| α_eff 范围 | [-170°, 240°] 需钳制 | **[-72°, 155°]** 自然范围 |
+| Peak θ_p | 87° | **37.6°** |
+| Pitch 稳态 | 64~76° | **15~27°** |
+| L/W (world) | 2.89 (bug) | **2.15** |
+| 攻角公式 | α_install+φ+θ_p | **α_install** (文献[32]) |
+| 符号翻转 | if/else 硬切换 | **tanh 平滑** |
+
+### 废弃数据
+
+v6.6 的 82GB 扫参数据（`temp/stability/sweep_cartesian/`）基于 bug 公式生成，已废弃。
+
+---
 
 ## Stability Analysis System
 
@@ -215,35 +267,21 @@ python src/stability_plot.py --all
 
 - [x] **numba JIT 加速** ✅ — 标量 @njit 编译 RK4 热循环, 4.8× 单仿真加速 (v6.6)
 - [x] **方案二: 全参数笛卡尔积扫描** ✅ — 9参数 3456 组, 16核 joblib, 56.7 min (v6.6)
+- [x] **攻角公式修正** ✅ — 文献[32]标准: α=η (相对拍动平面), tanh平滑 (v6.7)
+- [x] 用扫描结果更新默认参数和推荐配置 ✅ — DESIGN_v67 (v6.7)
+- [ ] **清理 v6.6 废弃数据** — `temp/stability/sweep_cartesian/` 82GB 基于 bug 公式, 可全删
+- [ ] **v6.7 全参数扫描** — 基于修正公式重跑笛卡尔积扫参
 - [ ] **方案二绘图** — 交互热力图、平行坐标图、Sobol 敏感性指数
-- [ ] **精化扫描** — a=5-7mm (步长 0.25), f=17-22Hz, R=2.75-3.25, phase=-25°~-12° 加密
-- [ ] φ_offset 扩展扫描 (-30° 到 0°) — 趋势显示越正越好，需确认最优上界
-- [ ] R 临界值精密扫描 (3.0-3.5mm, 步长 0.05mm) — 确定稳定性峭壁
-- [x] 用扫描结果更新默认参数和推荐配置 ✅ — DESIGN_v66: R=2.25/a=6 设计参数 (v6.6)
-- [ ] 写入 `stability_analysis.py` 的 `sweep_all()` 方法
-- [ ] **清理发散组数据** — 2,645 组 timeseries.npz 可回收 ~60GB
+- [ ] **精化扫描** — a=5-7mm (步长 0.25), f=17-22Hz, phase=-25°~-12° 加密
 
 ## Key Parameters
 
 ```python
-# v6.5 基线 (L/W_world=2.505, Fz_world=+460mN, peak θ=58.1°, 5s稳定)
-BASE = {"alpha_front_deg":68, "alpha_back_deg":5, "phase_diff_deg":-15,
-        "mech_a":6.0, "mech_R":2.5, "phi_offset_deg":-50.84}
-
-# v6.6 最优 (L/W_world=12.625, Fz_world=+2459mN, peak θ=35.1°, 5s稳定)
-BEST_v66 = {"alpha_front_deg":60, "alpha_back_deg":5, "phase_diff_deg":-20,
-            "mech_a":6, "mech_R":3.0, "phi_offset_deg":-30,
-            "f":17, "c_damp":5e-4, "rotation":"cw"}
-
-# v6.6 设计参数 (L/W_world=2.885, Fz_world=+566mN, peak θ=50.1°, 5s稳定)
-# 机构默认 R=2.25mm, a=6mm, 其他参数采用 v6.6 扫描最优
-DESIGN_v66 = {"alpha_front_deg":60, "alpha_back_deg":5, "phase_diff_deg":-20,
-              "mech_a":6, "mech_R":2.25, "phi_offset_deg":-30,
-              "f":17, "c_damp":5e-4, "rotation":"cw"}
-
-# v6.5 单参数最优 (L/W_world)
-# a=5.0 → 8.246 | R=3.0 → 6.734 | φ_off=-30° → 3.728 | phase=-15° → 2.505
-# α_f=68, α_b=5 (平坦, 非关键)
+# v6.7 设计参数 (L/W_world=2.15, Fz_world=+422mN, peak θ=37.6°, 5s稳定)
+# 攻角定义修正为文献[32]标准: α=η (翅膀相对拍动平面)
+DESIGN_v67 = {"alpha_front_deg":60, "alpha_back_deg":10, "phase_diff_deg":-20,
+              "mech_a":6.0, "mech_R":2.25, "phi_offset_deg":-30,
+              "f":17.0, "c_damp":5e-4, "rotation":"cw"}
 ```
 
 ```python
@@ -252,8 +290,6 @@ PHYS = {"rho":1.225, "g":9.81, "m_total":0.020, "I_yy":3e-5,
 
 MECH = {"a":6.0, "b":6.97, "R":2.25, "c":14.00, "l":8.00,
         "phi_offset_deg":-30, "f":17.0, "rotation":"cw"}
-# 偏移后 φ ∈ [-22.2°, +22.2°], 急回: 下拍 57%/上拍 43%
-# v6.6 设计参数: a=6, R=2.25 (默认), f=17Hz, φ_off=-30°, cw
 
 WING_FRONT = {"S":0.01617, "R":0.1543, "c_avg":0.1048, "r1":0.4227, "r2_sq":0.2382}
 WING_BACK  = {"S":0.01554, "R":0.1474, "c_avg":0.1054, "r1":0.4798, "r2_sq":0.2876}
