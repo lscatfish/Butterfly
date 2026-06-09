@@ -145,6 +145,44 @@ class SimulationOutput:
 
 
 # ============================================================
+# Clap-and-Fling — 速度-位置耦合增强窗口 (文献[36-39])
+# ============================================================
+
+def compute_clap_fling_window(phi, phi_dot, edge_width=0.10):
+    """Lighthill环量公式启发的clap-and-fling增强窗口.
+
+    文献[36-39]: clap-and-fling效应来自两翅分离时间隙射流产生
+    的额外环量. 增强正比于:
+      - 张开速度 |φ̇| (Lighthill Γ=g(λ)φ̇c²)
+      - 翅膀靠近程度 (位置余弦平方窗, 端点处最强)
+
+    Args:
+        phi: 翅膀拍动角数组 (rad)
+        phi_dot: 拍动角速度数组 (rad/s)
+        edge_width: 端点区域宽度 (占拍动幅度的比例, 默认10%)
+
+    Returns:
+        k_extra: (N,) 增强系数数组, 范围 [0, (|φ̇|/φ̇_peak)]
+    """
+    phi_max = np.max(phi); phi_min = np.min(phi)
+    phi_range = phi_max - phi_min
+    if phi_range < 1e-10:
+        return np.zeros_like(phi)
+    # 位置窗: 余弦平方, 端点=1, 远离=0
+    dist_to_max = np.abs(phi - phi_max)
+    dist_to_min = np.abs(phi - phi_min)
+    dist_norm = np.minimum(dist_to_max, dist_to_min) / phi_range
+    in_edge = dist_norm < edge_width
+    pos_window = np.zeros_like(phi)
+    pos_window[in_edge] = np.cos(dist_norm[in_edge] / edge_width * np.pi / 2.0)**2
+    # 速度耦合: 增强正比于 |φ̇|, 端点处速度→0 增强自动归零
+    phi_dot_peak = np.max(np.abs(phi_dot))
+    if phi_dot_peak < 1e-6:
+        return np.zeros_like(phi)
+    vel_factor = np.abs(phi_dot) / phi_dot_peak
+    return pos_window * vel_factor
+
+
 # C_L / C_D — v6.3 LEV/Lee 混合模型
 # ============================================================
 
@@ -447,10 +485,11 @@ def compute_wing_forces_vec(phi, phi_dot, phi_ddot, theta_p, theta_dot,
     alpha_dot = np.zeros(N)
     F_rot = config.rho * config.C_rot * alpha_dot * phi_dot * geo.c_avg**2 * geo.R * config.r_rot
 
-    # Clap-and-Fling
-    phi_dot_peak = np.max(np.abs(phi_dot))
-    in_reversal = np.abs(phi_dot) < 0.1 * phi_dot_peak
-    k_clap = np.where(in_reversal, config.k_clap, 1.0)
+    # Clap-and-Fling: 速度-位置耦合增强 (Lighthill Γ=g(λ)φ̇c²)
+    # k_extra ∝ |φ̇|/φ̇_peak × cos²窗(距端点距离)
+    # 端点处 φ̇→0 增强自动归零, 增强峰值在端点附近速度尚存处
+    k_clap_extra = compute_clap_fling_window(phi, phi_dot, edge_width=0.10)
+    k_clap = 1.0 + (config.k_clap - 1.0) * k_clap_extra
 
     L_eff = (L_trans + F_AM + F_rot) * k_clap
     D_eff = D_trans * k_clap
@@ -722,9 +761,9 @@ class ButterflyForceModel:
         pb_arr = phi_b; pdb_arr = phi_dot_b; pddb_arr = phi_ddot_b
 
         if use_nb:
-            # ---- 预计算 k_clap 数组 ----
-            kcl_f = np.where(np.abs(pdf_arr) < 0.1 * np.max(np.abs(pdf_arr)), cfg.k_clap, 1.0)
-            kcl_b = np.where(np.abs(pdb_arr) < 0.1 * np.max(np.abs(pdb_arr)), cfg.k_clap, 1.0)
+            # ---- 预计算 k_clap 数组 (速度-位置耦合, Lighthill公式) ----
+            kcl_f = 1.0 + (cfg.k_clap - 1.0) * compute_clap_fling_window(pf_arr, pdf_arr)
+            kcl_b = 1.0 + (cfg.k_clap - 1.0) * compute_clap_fling_window(pb_arr, pdb_arr)
 
             # ---- 打包 numba 参数 ----
             nb_params = (

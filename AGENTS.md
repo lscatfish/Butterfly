@@ -263,13 +263,33 @@ python src/stability_plot.py --all
 - [x] **攻角公式修正** ✅ — 文献[32]标准: α=η (相对拍动平面), tanh平滑 (v6.7)
 - [x] 用扫描结果更新默认参数和推荐配置 ✅ — DESIGN_v67 (v6.7)
 - [ ] **清理 v6.6 废弃数据** — `temp/stability/sweep_cartesian/` 82GB 基于 bug 公式, 可全删
-- [ ] **v6.8 Clap-and-Fling 物理模型修正** — 见下方计划
-- [ ] **v6.8 设计参数重扫描** — 新 clap-fling 模型下 α_f, α_b 最优值会变
+- [x] **v6.8 Clap-and-Fling 物理模型修正** ✅ — 速度-位置耦合, Lighthill公式启发
+- [ ] **v6.8 k_max 标定 + 设计参数重扫描** — k_max 需从 0.3 调至最优, α_f/α_b 重扫
 - [ ] **方案二绘图** — 交互热力图、平行坐标图、Sobol 敏感性指数
 
 ---
 
-## v6.8 Plan: Clap-and-Fling 速度耦合修正
+## v6.8: Clap-and-Fling 速度耦合修正 (已实现, 待标定)
+
+**状态**: 代码已实现 ✅ | k_max 标定 + 参数重扫待做 ⏳
+
+### 实现
+
+```python
+# butterfly_forces.py — 三处均已更新:
+# ① compute_clap_fling_window(phi, phi_dot, edge_width=0.10)
+#    → 返回 k_extra = |φ̇|/φ̇_peak × cos²窗(距端点距离)
+# ② compute_wing_forces_vec: k_clap = 1.0 + (config.k_clap - 1.0) * k_extra
+# ③ RK4 预计算: kcl_f/kcl_b 同步更新
+```
+
+### 当前表现 (k_max=0.3, L/W=2.12, peak_θ=37.0°)
+
+- 端点处 k_clap=1.0 (φ̇→0 增强自动归零)
+- 峰值 k_clap≈1.09 在 crank≈225° (端点前, 速度尚存)
+- 力曲线无 kink
+- 增强很弱 (~9%), 因为 k_max=0.3 来自旧常量, 需重新标定
+- k_max 待扫参确定 → 目标是平均 L/W 增加 ~30% 匹配文献[38]
 
 ### 问题
 
