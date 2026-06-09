@@ -48,25 +48,25 @@ BASELINE_CONFIG = dict(
     f=17.0, rho=1.225, m_total=0.020, I_yy=3e-5, d_cg=0.015,
     x_front=0.025, x_back=-0.025,
     dt=50e-6, t_end=5.0, theta0_deg=0.0, steady_start=3.0,
-    k_3d=0.7, C_rot=1.5, r_rot=0.5, k_clap=1.3, c_damp=5e-4,
+    k_3d=0.7, C_rot=1.5, r_rot=0.5, k_clap=0.5, c_damp=5e-4,
 )
 
 # ============================================================
-# 缺省笛卡尔积网格 — 9 参数粗网格 (2×2×2×4×3×3×3×2×2 = 3456 组)
-# 编辑此字典即可自定义扫描范围和分辨率
+# v6.8 笛卡尔积网格 — 新增 k_clap, 扩大 α_f/α_b/phase 范围
+# 5×5×5×5×3×3×4×2×1×1 = 45,000 组 (vs 旧 30,720, ~47% 更多)
+# 预计 ~30-50 min (16 核 joblib + numba JIT)
 # ============================================================
-# v6.7: 攻角公式修正为文献[32]标准 (α=η相对拍动平面, 上下拍符号翻转)
-# 稳定窗: α_f≥52°, α_b匹配决定稳定性; a仅6mm可行; cw必须
 DEFAULT_GRID = {
-    "alpha_front_deg":  [55, 60, 65, 68],
-    "alpha_back_deg":   [3, 5, 8, 10, 12],
-    "phase_diff_deg":   [-25, -20, -15, -10],
-    "mech_a":           [6, 7, 7.5, 8],
-    "mech_R":           [2.0, 2.25, 2.5, 2.75],
-    "phi_offset_deg":   [-40, -35, -30, -25],
-    "f":                [13, 15, 17],
-    "c_damp":           [1e-4, 5e-4],
-    "rotation":         ["cw"],
+    "alpha_front_deg":  [50, 55, 60, 65, 70],         # 5 (was 4, 扩大)
+    "alpha_back_deg":   [3, 5, 8, 10, 15],             # 5 (15° 替换 12°)
+    "phase_diff_deg":   [-30, -25, -20, -15, -10],     # 5 (was 4, 加 -30°)
+    "mech_a":           [6, 7, 8],                      # 3 (was 4, 去 7.5)
+    "mech_R":           [2.0, 2.25, 2.5],               # 3 (was 4, 去 2.75)
+    "phi_offset_deg":   [-40, -35, -30, -25],           # 4
+    "f":                [15, 17],                        # 2 (was 3, 去 13)
+    "c_damp":           [5e-4],                          # 1 (baseline)
+    "rotation":         ["cw"],                          # 1
+    "k_clap":           [0.3, 0.5, 0.8, 1.0, 1.5],     # 5 NEW
 }
 
 PARAM_SHORT = {
@@ -74,6 +74,7 @@ PARAM_SHORT = {
     "phase_diff_deg": "ph", "mech_a": "a",
     "mech_R": "R", "phi_offset_deg": "po",
     "f": "f", "c_damp": "cd", "rotation": "rot",
+    "k_clap": "kc",
 }
 
 

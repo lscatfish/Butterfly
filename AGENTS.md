@@ -224,8 +224,8 @@ sweep_cartesian.py
   └─ sweep_cartesian(grid_spec, n_jobs=-1) → sweep_summary.json
 ```
 
-- **3456 组** 9 参数粗网格全扫描，56.7 min (16 核, numba 4.8×)
-- **最佳 L/W = 12.625** (基线 2.505 的 5.0×): α_f=60°, α_b=5°, phase=-20°, a=6, R=3.0, φ_off=-30, f=17, cd=5e-4, rot=cw
+- **3456 组** 9 参数粗网格全扫描，56.7 min (16 核, numba 4.8×) ⚠️ 基于 v6.6 bug 公式, 已废弃
+- **v6.8 扫参**: **45,000 组** 10 参数 (新增 k_clap [0.3,0.5,0.8,1.0,1.5]), 预计 30-50 min
 - 输出与方案一完全兼容 (config/summary/timeseries)，绘图模块可复用
 - 详细报告见 `docs/v6_6_cartesian_sweep_report.md`
 
@@ -264,7 +264,8 @@ python src/stability_plot.py --all
 - [x] 用扫描结果更新默认参数和推荐配置 ✅ — DESIGN_v67 (v6.7)
 - [ ] **清理 v6.6 废弃数据** — `temp/stability/sweep_cartesian/` 82GB 基于 bug 公式, 可全删
 - [x] **v6.8 Clap-and-Fling 物理模型修正** ✅ — 速度-位置耦合, Lighthill公式启发
-- [ ] **v6.8 k_max 标定 + 设计参数重扫描** — k_max 需从 0.3 调至最优, α_f/α_b 重扫
+- [x] **v6.8 k_clap 语义变更** ✅ — 默认 0.5 (k_max), 扫参网格 45,000 组
+- [ ] **v6.8 全量扫描** — `python src/sweep_cartesian.py --n-jobs 16`
 - [ ] **方案二绘图** — 交互热力图、平行坐标图、Sobol 敏感性指数
 
 ---
@@ -366,10 +367,12 @@ k_clap = 1.0 + k_clap_extra
 
 ```python
 # v6.7 设计参数 (L/W_world=2.15, Fz_world=+422mN, peak θ=37.6°, 5s稳定)
+# v6.7 设计参数 (L/W_world=2.15, Fz_world=+422mN, peak θ=37.6°, 5s稳定)
 # 攻角定义修正为文献[32]标准: α=η (翅膀相对拍动平面)
+# k_clap=0.5 为 v6.8 速度耦合 clap-fling 参数 (待扫参标定)
 DESIGN_v67 = {"alpha_front_deg":60, "alpha_back_deg":10, "phase_diff_deg":-20,
               "mech_a":6.0, "mech_R":2.25, "phi_offset_deg":-30,
-              "f":17.0, "c_damp":5e-4, "rotation":"cw"}
+              "f":17.0, "c_damp":5e-4, "rotation":"cw", "k_clap":0.5}
 ```
 
 ```python

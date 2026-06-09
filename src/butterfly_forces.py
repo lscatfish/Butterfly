@@ -99,7 +99,7 @@ class SimulationConfig:
     k_3d: float = 0.7
     C_rot: float = 1.5
     r_rot: float = 0.5
-    k_clap: float = 1.3
+    k_clap: float = 0.5              # clap-fling 速度耦合增强系数 k_max
     c_damp: float = 5e-4              # 人工俯仰阻尼 [N·m·s/rad]
 
     def to_mech_params(self) -> dict:
@@ -489,7 +489,7 @@ def compute_wing_forces_vec(phi, phi_dot, phi_ddot, theta_p, theta_dot,
     # k_extra ∝ |φ̇|/φ̇_peak × cos²窗(距端点距离)
     # 端点处 φ̇→0 增强自动归零, 增强峰值在端点附近速度尚存处
     k_clap_extra = compute_clap_fling_window(phi, phi_dot, edge_width=0.10)
-    k_clap = 1.0 + (config.k_clap - 1.0) * k_clap_extra
+    k_clap = 1.0 + config.k_clap * k_clap_extra
 
     L_eff = (L_trans + F_AM + F_rot) * k_clap
     D_eff = D_trans * k_clap
@@ -762,8 +762,8 @@ class ButterflyForceModel:
 
         if use_nb:
             # ---- 预计算 k_clap 数组 (速度-位置耦合, Lighthill公式) ----
-            kcl_f = 1.0 + (cfg.k_clap - 1.0) * compute_clap_fling_window(pf_arr, pdf_arr)
-            kcl_b = 1.0 + (cfg.k_clap - 1.0) * compute_clap_fling_window(pb_arr, pdb_arr)
+            kcl_f = 1.0 + cfg.k_clap * compute_clap_fling_window(pf_arr, pdf_arr)
+            kcl_b = 1.0 + cfg.k_clap * compute_clap_fling_window(pb_arr, pdb_arr)
 
             # ---- 打包 numba 参数 ----
             nb_params = (

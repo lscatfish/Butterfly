@@ -42,7 +42,7 @@ BASELINE_CONFIG = dict(
     f=17.0, rho=1.225, m_total=0.020, I_yy=3e-5, d_cg=0.015,
     x_front=0.025, x_back=-0.025,
     dt=50e-6, t_end=5.0, theta0_deg=0.0, steady_start=3.0,
-    k_3d=0.7, C_rot=1.5, r_rot=0.5, k_clap=1.3, c_damp=5e-4,
+    k_3d=0.7, C_rot=1.5, r_rot=0.5, k_clap=0.5, c_damp=5e-4,
 )
 
 # ============================================================
@@ -55,6 +55,7 @@ SWEEP_RANGES = {
     "mech_a":           [5.0, 6.0, 7.0, 7.5, 7.92, 8.5, 9.5, 11.0, 12.0],
     "mech_R":           [2.0, 2.25, 2.5, 2.75, 3.0, 3.25, 3.5],
     "phi_offset_deg":   [-50, -45, -40, -35, -30, -25, -20],
+    "k_clap":           [0.3, 0.5, 0.8, 1.0, 1.5],
 }
 
 # 数值参数的扫描格式
@@ -62,6 +63,7 @@ PARAM_FORMATS = {
     "alpha_front_deg": "af", "alpha_back_deg": "ab",
     "phase_diff_deg": "ph", "mech_a": "a",
     "mech_R": "R", "phi_offset_deg": "po",
+    "k_clap": "kc",
 }
 
 
