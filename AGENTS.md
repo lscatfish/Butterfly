@@ -409,6 +409,14 @@ DESIGN_v68_conservative = {
     "f": 17, "c_damp": 5e-4, "rotation": "cw", "k_clap": 0.3,
 }
 # L/W=2.774, peak_θ=26.1°, Fz_world=+544mN
+
+# R=2.25 最优方案 (高稳定率 87%, 机构约束):
+DESIGN_v68_R225 = {
+    "alpha_front_deg": 50, "alpha_back_deg": 10, "phase_diff_deg": -30,
+    "mech_a": 6.0, "mech_R": 2.25, "phi_offset_deg": -35,
+    "f": 17, "c_damp": 5e-4, "rotation": "cw", "k_clap": 0.3,
+}
+# L/W=2.370, peak_θ=54.0°, Fz_world=+454mN, 稳定率 87% (kc=0.3 下)
 ```
 
 #### v6.8 扫参关键发现
@@ -464,6 +472,7 @@ k_clap   稳定率   平均L/W   最大L/W   L/W≥2.0组数
 ##### 快速分析脚本
 ```bash
 python temp/analyze_sweep_v68.py   # 完整六步分析，输出 Top 30 和推荐参数
+python temp/plot_sweep_v68.py      # 7 张综合图表 → output/figures/
 ```
 
 ```python
