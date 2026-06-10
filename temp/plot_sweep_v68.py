@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-v6.8 扫参分析可视化 — 基于 10,326 组数据
+v6.8 扫参分析可视化 — 基于全量 11,622 组数据 (α_f=30-70)
 输出所有图表到 output/figures/
 """
 import json, warnings
@@ -45,7 +45,10 @@ plt.rcParams["axes.unicode_minus"] = False
 # ============================================================
 # 路径
 # ============================================================
-SWEEP_DIR = Path("temp/stability/sweep_cartesian")
+SWEEP_DIRS = [
+    Path("F:/重大作业考试/26秋/机械原理/全链路气动仿真/temp/stability/sweep_cartesian"),
+    Path("temp/stability/sweep_cartesian"),
+]
 FIG_DIR = Path("output/figures")
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -54,20 +57,27 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # ============================================================
 def load_data():
     records = []
-    for d in sorted(SWEEP_DIR.iterdir()):
-        if not d.is_dir():
+    seen = set()
+    for SWEEP_DIR in SWEEP_DIRS:
+        if not SWEEP_DIR.exists():
             continue
-        sm = d / "summary.json"
-        if not sm.exists():
-            continue
-        try:
-            with open(sm) as f:
-                s = json.load(f)
-        except Exception:
-            continue
-        combo = s.pop("_combo", {})
-        s.update(combo)
-        records.append(s)
+        for d in sorted(SWEEP_DIR.iterdir()):
+            if not d.is_dir():
+                continue
+            if d.name in seen:
+                continue
+            seen.add(d.name)
+            sm = d / "summary.json"
+            if not sm.exists():
+                continue
+            try:
+                with open(sm) as f:
+                    s = json.load(f)
+            except Exception:
+                continue
+            combo = s.pop("_combo", {})
+            s.update(combo)
+            records.append(s)
     df = pd.DataFrame(records)
     df["stable"] = df["n_exceed_90"] == 0
     df["L_W_bin"] = pd.cut(df["L/W"], bins=20)

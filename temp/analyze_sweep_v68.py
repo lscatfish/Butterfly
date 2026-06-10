@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-v6.8 扫参分析 — 聚合 10,326 组数据，找最优参数
+v6.8 扫参分析 — 聚合全量 11,622 组数据 (α_f=30-70)，找最优参数
 """
 import json, sys, warnings
 from pathlib import Path
@@ -9,7 +9,10 @@ import pandas as pd
 
 warnings.filterwarnings("ignore")
 
-SWEEP_DIR = Path("temp/stability/sweep_cartesian")
+SWEEP_DIRS = [
+    Path("F:/重大作业考试/26秋/机械原理/全链路气动仿真/temp/stability/sweep_cartesian"),
+    Path("temp/stability/sweep_cartesian"),
+]
 OUT_DIR = Path("output/figures")
 
 # ============================================================
@@ -18,22 +21,29 @@ OUT_DIR = Path("output/figures")
 print("=" * 60)
 print("Step 1: 数据聚合")
 records = []
-for d in sorted(SWEEP_DIR.iterdir()):
-    if not d.is_dir():
+seen = set()
+for SWEEP_DIR in SWEEP_DIRS:
+    if not SWEEP_DIR.exists():
         continue
-    sm = d / "summary.json"
-    if not sm.exists():
-        continue
-    try:
-        with open(sm) as f:
-            s = json.load(f)
-    except Exception:
-        continue
-    # _combo 包含所有扫描参数
-    combo = s.pop("_combo", {})
-    s.update(combo)
-    s["_dir"] = d.name
-    records.append(s)
+    for d in sorted(SWEEP_DIR.iterdir()):
+        if not d.is_dir():
+            continue
+        sm = d / "summary.json"
+        if not sm.exists():
+            continue
+        if d.name in seen:
+            continue
+        seen.add(d.name)
+        try:
+            with open(sm) as f:
+                s = json.load(f)
+        except Exception:
+            continue
+        # _combo 包含所有扫描参数
+        combo = s.pop("_combo", {})
+        s.update(combo)
+        s["_dir"] = d.name
+        records.append(s)
 
 df = pd.DataFrame(records)
 print(f"Loaded {len(df)} results")
