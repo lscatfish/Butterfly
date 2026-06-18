@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from src.aero.butterfly_forces import (
+    DESIGN_v68,
     SimulationConfig,
     WingGeometry,
     compute_cop_vec,
