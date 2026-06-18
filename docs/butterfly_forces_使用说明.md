@@ -1,6 +1,8 @@
 # butterfly_forces.py 使用说明
 
-> 蝴蝶扑翼力输出模块 — 让傻子都能看懂的使用指南
+> 蝴蝶扑翼力输出模块 — v6.7 文献标准攻角定义
+
+**当前版本：v6.7** | 攻角公式修正为文献[32]标准 | 设计参数：α_f=60°, α_b=10°
 
 ---
 
@@ -9,6 +11,18 @@
 一句话：**输入蝴蝶的设计参数，输出每只翅膀上受到的力和力矩。**
 
 你要分析摇杆（四连杆机构的输出端）受多大的力？曲柄需要多大扭矩？翅膀上气动力怎么分布的？——调这个模块就行。
+
+### v6.7 关键修正
+
+**攻角定义**改为文献[32]标准：攻角 = 翅膀弦线相对**拍动平面**（体轴 XZ 平面）的角度。
+
+```
+α_eff = -tanh(φ̇) · (α_install + δα)
+```
+
+- η = α_install：翅膀相对拍动平面的安装角
+- φ 和 θ_p **不进入攻角**——它们通过力投影和重力矩体现
+- 上下拍符号翻转用 **tanh 平滑过渡**（消除力突变）
 
 ---
 
@@ -158,8 +172,12 @@ from butterfly_forces import *
 ```python
 from butterfly_forces import SimulationConfig, ButterflyForceModel
 
-# 用默认参数（已经是最优的 α_f=60°, α_b=8°）
-cfg = SimulationConfig()
+# 设计参数 (v6.7: α_f=60°, α_b=10°)
+cfg = SimulationConfig(
+    alpha_front_deg=60, alpha_back_deg=10,
+    phase_diff_deg=-20, mech_a=6, mech_R=2.25,
+    phi_offset_deg=-30, f=17, c_damp=5e-4, rotation='cw',
+)
 model = ButterflyForceModel(cfg)
 
 # 跑仿真！
@@ -167,7 +185,7 @@ out = model.simulate()
 
 # 看结果
 print(out.summary)
-# → {'L/W': 1.033, 'peak_theta_deg': 46.7, 'n_exceed_90': 0, ...}
+# → {'L/W': 2.15, 'peak_theta_deg': 37.6, 'n_exceed_90': 0, ...}
 
 # 拿前翅左的体轴力
 F_FL = out.wings["FL"].force_body   # shape: (N, 3) — [Fx, Fy, Fz] 每行
@@ -267,7 +285,7 @@ out.config         # SimulationConfig, 回记用的参数
 
 | 字段 | 说明 |
 |------|------|
-| `L/W` | 升力/重量比（体轴 Fz）。≥1.0 = 能悬停 |
+| `L/W` | 升力/重量比（世界系 Fz_world/重量）。≥1.0 = 能悬停 |
 | `avg_Fz_body_mN` | 稳态平均体轴升力 [mN] |
 | `avg_Fz_world_mN` | 稳态平均世界升力 [mN] |
 | `avg_Fx_body_mN` | 稳态平均体轴推力 [mN] |
@@ -285,21 +303,21 @@ out.config         # SimulationConfig, 回记用的参数
 @dataclass
 class SimulationConfig:
     # ===== 翅膀安装 =====
-    alpha_front_deg: float = 60.0     # 前翅安装角 [°] — 翅膀弦线与机身水平面的夹角
-    alpha_back_deg: float = 8.0       # 后翅安装角 [°]
-    phase_diff_deg: float = 0.0       # 前后翅相位差 [°] — 0=同相, 180=反相
+    alpha_front_deg: float = 60.0     # 前翅安装角 [°] — 翅膀弦线相对拍动平面的角度
+    alpha_back_deg: float = 10.0      # 后翅安装角 [°]
+    phase_diff_deg: float = -20.0     # 前后翅相位差 [°] — 0=同相, 180=反相
 
     # ===== 四连杆机构 =====
-    mech_a: float = 7.92              # 铰链 A 的 y 坐标 [mm] — 改这个影响摆幅和急回比
+    mech_a: float = 6.0               # 铰链 A 的 y 坐标 [mm] — 改这个影响摆幅和急回比
     mech_b: float = 6.97              # 曲柄中心 x 坐标 [mm]
     mech_R: float = 2.25              # 曲柄半径 [mm] — 改这个直接改摆幅
     mech_c: float = 14.00             # 连杆长度 [mm]
     mech_l: float = 8.00              # 摇杆长度 [mm]
-    phi_offset_deg: float = -50.84    # 翅膀在摇杆上的安装偏角 [°]
+    phi_offset_deg: float = -30.0     # 翅膀在摇杆上的安装偏角 [°]
     rotation: str = 'cw'              # 曲柄转向 'cw' 或 'ccw'
 
     # ===== 物理 =====
-    f: float = 15.0                   # 扑动频率 [Hz]
+    f: float = 17.0                   # 扑动频率 [Hz]
     rho: float = 1.225                # 空气密度 [kg/m³]
     m_total: float = 0.020            # 总质量 [kg]
     I_yy: float = 3e-5                # 俯仰转动惯量 [kg·m²]
@@ -329,7 +347,7 @@ class SimulationConfig:
 ### 场景 A：机构分析（摇杆/连杆受力）
 
 ```python
-cfg = SimulationConfig(alpha_front_deg=60, alpha_back_deg=8, dt=10e-6, t_end=10.0)
+cfg = SimulationConfig(alpha_front_deg=60, alpha_back_deg=10, dt=10e-6, t_end=10.0)
 model = ButterflyForceModel(cfg)
 out = model.simulate()
 
@@ -395,25 +413,38 @@ out = model.simulate()
 
 1. **时间步长选择**：精细力分析用 `dt=10e-6`（10μs），参数扫描用 `dt=50e-6`（50μs）提速 5 倍
 2. **稳态判断**：5 秒后数据视为稳态。`t_end` 必须 > `steady_start`
-3. **L/W 的体轴 vs 世界**：`summary["L/W"]` 用体轴 Fz 算的。当前固定模型下，世界系 Fz 只有体轴的一半左右（因为身体 pitch 振荡导致投影损失）
+3. **L/W 定义**：`summary["L/W"]` 用世界系 Fz_world / 重量。世界系严格垂直分量，是物理悬停判据
 4. **翅膀编号**：FL=前左, FR=前右, BL=后左, BR=后右。左右翅力对称（Fy 符号相反）
 5. **内存**：10s@10μs 产生约 1M 步 × 4 翅 × 3 分量 ≈ 96MB 数据。内存不够时用 `dt=50e-6`
 
 ---
 
-## 8. C_L/C_D 模型说明
+## 8. 攻角定义与 C_L/C_D 模型
 
-本模块使用 **v6.3 LEV/Lee 混合模型**：
+### 8.1 攻角定义 (v6.7, 文献[32]标准)
 
 ```
-|α| ≤ 55°: Dickinson 经验公式（含 LEV 增强效应）
+α_eff = -tanh(φ̇) · (α_install + δα)
+
+其中:
+  α_install  = 翅膀相对拍动平面(体轴XZ)的安装角
+  δα         = atan2(θ̇_p·x_wing, |Ω|·R) — 俯仰气动阻尼
+  -tanh(φ̇)  = 平滑符号翻转 (下拍+, 上拍−)
+```
+
+- φ（拍动角）和 θ_p（俯仰角）**不进入攻角**
+- 拍动平面随 body 整体倾斜，通过力投影和重力矩体现
+
+### 8.2 C_L/C_D 混合模型
+
+```
+|α| ≤ 55°: Dickinson 经验公式 (C_L=0.255+1.58sin(2.13α−7.2°))
 55°~65°:   smoothstep 平滑过渡
-|α| ≥ 65°: C_L = 1.866·sin(2α), C_D = 0.393 + 1.414·(1−cos(2α))
+|α| ≥ 65°: LEV/Lee 理论 (C_L=1.866sin(2α), C_D=0.393+1.414(1−cos(2α)))
 ```
 
-- C_D_max = 3.221（接近昆虫实测 ~3.0−3.5）
-- C_L 在 α=90° 自然归零，α>90° 自动变号（物理正确）
-- 参考：文献 [32] JRSI 2017 (LEV), [24] 机器人 2025 (Lee)
+- 当前设计 α_f=60° 时 α_eff≈±60°, 处于 Dickinson 峰值区 (CL_max≈1.8 @ α≈45-50°)
+- 参考：文献 [11][26] (Dickinson), [32] JRSI 2017 (LEV), [24] 机器人 2025 (Lee)
 
 ---
 
@@ -443,7 +474,9 @@ from butterfly_forces import *
 
 # 1. 配置
 cfg = SimulationConfig(
-    alpha_front_deg=60, alpha_back_deg=8,
+    alpha_front_deg=60, alpha_back_deg=10,
+    phase_diff_deg=-20, mech_a=6, mech_R=2.25,
+    phi_offset_deg=-30, f=17, c_damp=5e-4, rotation='cw',
     dt=10e-6, t_end=10.0, steady_start=5.0,
 )
 

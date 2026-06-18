@@ -39,32 +39,34 @@ except ImportError:
 OUT_ROOT = _PROJ / "temp" / "stability" / "sweep_cartesian"
 
 # ============================================================
-# v6.5 基线参数 — 与 stability_analysis.BASELINE_CONFIG 一致
+# v6.7 基线参数 — 攻角公式修正为文献[32]标准 (α=η相对拍动平面)
 # ============================================================
 BASELINE_CONFIG = dict(
-    alpha_front_deg=68, alpha_back_deg=5,
-    phase_diff_deg=-15, mech_a=6.0, mech_R=2.5,
-    phi_offset_deg=-50.84, rotation='cw',
-    f=15.0, rho=1.225, m_total=0.020, I_yy=3e-5, d_cg=0.015,
+    alpha_front_deg=60, alpha_back_deg=10,
+    phase_diff_deg=-20, mech_a=6.0, mech_R=2.25,
+    phi_offset_deg=-30, rotation='cw',
+    f=17.0, rho=1.225, m_total=0.020, I_yy=3e-5, d_cg=0.015,
     x_front=0.025, x_back=-0.025,
     dt=50e-6, t_end=5.0, theta0_deg=0.0, steady_start=3.0,
-    k_3d=0.7, C_rot=1.5, r_rot=0.5, k_clap=1.3, c_damp=5e-4,
+    k_3d=0.7, C_rot=1.5, r_rot=0.5, k_clap=0.5, c_damp=5e-4,
 )
 
 # ============================================================
-# 缺省笛卡尔积网格 — 9 参数粗网格 (2×2×2×4×3×3×3×2×2 = 3456 组)
-# 编辑此字典即可自定义扫描范围和分辨率
+# v6.8 笛卡尔积网格 — 粗网格补扫 α_f=[30,40,60,70]
+# 4×3×3×2×3×3×1×2×1×1 = 1,296 组, 预计 ~3 min
+# α_f=50 已全覆盖 (9,000 组), 跳过
 # ============================================================
 DEFAULT_GRID = {
-    "alpha_front_deg":  [60, 68],
-    "alpha_back_deg":   [3, 5],
-    "phase_diff_deg":   [-20, -10],
-    "mech_a":           [6, 8, 10, 12],
-    "mech_R":           [2.5, 3.0, 3.25],
-    "phi_offset_deg":   [-50, -40, -30],
-    "f":                [13, 15, 17],
-    "c_damp":           [1e-4, 5e-4],
-    "rotation":         ["cw", "ccw"],
+    "alpha_front_deg":  [30, 40, 60, 70],               # 4 (向下扩展 30-40°, 去已扫的 50)
+    "alpha_back_deg":   [3, 8, 15],                      # 3 (拉大步长)
+    "phase_diff_deg":   [-30, -20, -10],                 # 3 (拉大步长)
+    "mech_a":           [6, 8],                           # 2 (去 7, 数据已证明 7 远不如 6)
+    "mech_R":           [2.0, 2.25, 2.5],                # 3
+    "phi_offset_deg":   [-40, -30, -25],                 # 3 (去 -35, 就近已覆盖)
+    "f":                [17],                             # 1 (f=17 一致优于 f=15)
+    "c_damp":           [5e-4],                           # 1
+    "rotation":         ["cw"],                           # 1
+    "k_clap":           [0.3, 0.5],                       # 2 (拉大步长, 0.3 最优已确认)
 }
 
 PARAM_SHORT = {
@@ -72,6 +74,7 @@ PARAM_SHORT = {
     "phase_diff_deg": "ph", "mech_a": "a",
     "mech_R": "R", "phi_offset_deg": "po",
     "f": "f", "c_damp": "cd", "rotation": "rot",
+    "k_clap": "kc",
 }
 
 
