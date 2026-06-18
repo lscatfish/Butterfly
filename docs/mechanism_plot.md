@@ -1,7 +1,7 @@
 # 前置机构运动学可视化工具（mechanism_plot.py）
 
-> 本文件说明 `src/mechanism_plot.py` 的功能、命令行接口、输出图表与使用方法。  
-> 该脚本依赖 `src/mechanism.py` 的运动学求解器，用于绘制四连杆机构的运动学特性。
+> 本文件说明 `src/struct/mechanism_plot.py` 的功能、命令行接口、输出图表与使用方法。  
+> 该脚本依赖 `src/struct/mechanism.py` 的运动学求解器，用于绘制四连杆机构的运动学特性。
 
 ---
 
@@ -63,7 +63,7 @@ mechanism_plot.py
 ### 5.1 默认运行（自动应用对称偏移）
 
 ```bash
-python src/mechanism_plot.py
+python src/struct/mechanism_plot.py
 ```
 
 输出示例：
@@ -76,7 +76,7 @@ Saved: output/figures/mechanism_analysis.png
 ### 5.2 查看原始机构输出（无偏移）
 
 ```bash
-python src/mechanism_plot.py --phi-offset 0
+python src/struct/mechanism_plot.py --phi-offset 0
 ```
 
 原始机构角度范围约 `[28.6°, 73.1°]`，全在上拍区。
@@ -84,13 +84,13 @@ python src/mechanism_plot.py --phi-offset 0
 ### 5.3 指定频率和 a 值
 
 ```bash
-python src/mechanism_plot.py --freq 20 --a 9.0
+python src/struct/mechanism_plot.py --freq 20 --a 9.0
 ```
 
 ### 5.4 自定义 a 扫描列表
 
 ```bash
-python src/mechanism_plot.py --a-list 6 7 8 9 10
+python src/struct/mechanism_plot.py --a-list 6 7 8 9 10
 ```
 
 ---
@@ -107,6 +107,6 @@ python src/mechanism_plot.py --a-list 6 7 8 9 10
 
 | 文件 | 路径 |
 |---|---|
-| 可视化脚本 | `src/mechanism_plot.py` |
-| 依赖的运动学模块 | `src/mechanism.py` |
+| 可视化脚本 | `src/struct/mechanism_plot.py` |
+| 依赖的运动学模块 | `src/struct/mechanism.py` |
 | 输出图片 | `output/figures/mechanism_analysis.png` |

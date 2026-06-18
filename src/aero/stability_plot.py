@@ -13,8 +13,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib import ticker
 
-_PROJ = Path(__file__).parent.parent
-sys.path.insert(0, str(_PROJ / "src"))
+_PROJ = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(_PROJ))
 
 STABILITY_DIR = _PROJ / "temp" / "stability"
 OUT_DIR = STABILITY_DIR / "figures"

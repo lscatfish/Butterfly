@@ -21,10 +21,10 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 OUTPUT_DIR = ROOT / "output" / "figures"
 
-from mechanism import DEFAULT_PARAMS, solve_phi, wing_kinematics
+from src.struct.mechanism import DEFAULT_PARAMS, solve_phi, wing_kinematics
 
 
 def analyze_geometry(params: dict, n_frames: int = 360):

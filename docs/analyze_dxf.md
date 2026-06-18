@@ -1,6 +1,6 @@
 # DXF 翅膀几何分析模块（analyze_dxf.py）
 
-> 本文件说明 `src/analyze_dxf.py` 的功能、DXF 解析逻辑与几何参数计算方法。  
+> 本文件说明 `src/struct/analyze_dxf.py` 的功能、DXF 解析逻辑与几何参数计算方法。  
 > 负责从 SolidWorks DXF 导出文件中提取翅膀平面形状参数，供气动分析使用。
 
 ---
@@ -82,7 +82,7 @@ calculate_planform_properties(points_mm, axis)
 ## 7. 使用示例
 
 ```bash
-python src/analyze_dxf.py
+python src/struct/analyze_dxf.py
 ```
 
 输出：`data/wing_analysis_results.json` + `output/figures/wing_analysis.png`
@@ -93,6 +93,6 @@ python src/analyze_dxf.py
 
 | 文件 | 路径 |
 |---|---|
-| 分析脚本 | `src/analyze_dxf.py` |
+| 分析脚本 | `src/struct/analyze_dxf.py` |
 | 输出 JSON | `data/wing_analysis_results.json` |
 | 输出图表 | `output/figures/wing_analysis.png` |

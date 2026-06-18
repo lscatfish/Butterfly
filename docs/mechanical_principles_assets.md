@@ -12,7 +12,7 @@ output/reports/机械原理曲线图读图说明.md
 在项目根目录运行：
 
 ```bash
-python src/generate_mechanical_principles_assets.py
+python src/struct/generate_mechanical_principles_assets.py
 ```
 
 该命令默认只重新生成图片和 JSON 汇总文件，不覆盖已经手工修改过的 Markdown 报告。
@@ -42,7 +42,7 @@ output/tables/mechanical_principles_summary.json
 配套计算入口位于：
 
 ```text
-src/mechanical_principles_analysis.py
+src/struct/mechanical_principles_analysis.py
 ```
 
 主要流程为：
@@ -76,7 +76,7 @@ window_deg = 10.5
 如果确实需要用脚本模板覆盖生成主分析报告，可运行：
 
 ```bash
-python src/generate_mechanical_principles_assets.py --write-report-template
+python src/struct/generate_mechanical_principles_assets.py --write-report-template
 ```
 
 注意：该选项会重新写入：

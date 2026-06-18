@@ -23,9 +23,9 @@ import sys, json, time, os, traceback
 from pathlib import Path
 import numpy as np
 
-_PROJ = Path(__file__).parent.parent
-sys.path.insert(0, str(_PROJ / "src"))
-from butterfly_forces import SimulationConfig, ButterflyForceModel
+_PROJ = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(_PROJ))
+from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel
 
 OUT_ROOT = _PROJ / "temp" / "stability"
 BASELINE_DIR = OUT_ROOT / "baseline"

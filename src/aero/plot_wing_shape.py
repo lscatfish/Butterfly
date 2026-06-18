@@ -23,13 +23,13 @@ from pathlib import Path
 
 import numpy as np
 
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 OUTPUT_DIR = PROJECT_ROOT / "output" / "figures"
 
 # 复用 analyze_dxf 的解析函数
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
-from analyze_dxf import parse_dxf, connect_entities, read_axis_from_dxf
+sys.path.insert(0, str(PROJECT_ROOT))
+from src.struct.analyze_dxf import parse_dxf, connect_entities, read_axis_from_dxf
 
 
 def rotate_around_axis(pts, axis, phi_deg):

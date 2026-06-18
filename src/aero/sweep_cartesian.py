@@ -24,9 +24,9 @@ from pathlib import Path
 from itertools import product
 import numpy as np
 
-_PROJ = Path(__file__).parent.parent
-sys.path.insert(0, str(_PROJ / "src"))
-from butterfly_forces import SimulationConfig, ButterflyForceModel, _HAS_NUMBA
+_PROJ = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(_PROJ))
+from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, _HAS_NUMBA
 
 try:
     from joblib import Parallel, delayed

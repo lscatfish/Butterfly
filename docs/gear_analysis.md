@@ -1,6 +1,6 @@
 # 定轴轮系分析模块（gear_analysis.py）
 
-> 本文件说明 `src/gear_analysis.py` 的功能、数据结构与输出。  
+> 本文件说明 `src/gear/gear_analysis.py` 的功能、数据结构与输出。  
 > 用于分析仿生蝴蝶减速器的两级定轴外啮合圆柱齿轮传动。
 
 ---
@@ -99,4 +99,4 @@ train.print_summary()
 
 | 文件 | 路径 |
 |---|---|
-| 轮系分析模块 | `src/gear_analysis.py` |
+| 轮系分析模块 | `src/gear/gear_analysis.py` |

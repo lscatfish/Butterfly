@@ -3,8 +3,8 @@
 import sys, time
 from pathlib import Path
 _PROJ = Path(__file__).parent.parent
-sys.path.insert(0, str(_PROJ / "src"))
-from stability_analysis import sweep_parameter
+sys.path.insert(0, str(_PROJ))
+from src.aero.stability_analysis import sweep_parameter
 
 PARAMS = [
     "alpha_front_deg",

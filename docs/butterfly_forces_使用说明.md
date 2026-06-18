@@ -153,15 +153,15 @@
 
 ## 2. 安装
 
-不需要安装。把 `src/butterfly_forces.py` 放到你的项目里，然后：
+不需要安装。把 `src/aero/butterfly_forces.py` 放到你的项目里，然后：
 
 ```python
 import sys
 sys.path.insert(0, 'path/to/Butterfly/src')
-from butterfly_forces import *
+from src.aero.butterfly_forces import *
 ```
 
-**依赖**：numpy, matplotlib（仅绘图需要）, `src/mechanism.py`（已包含）, `data/wing_analysis_results.json`（已包含）
+**依赖**：numpy, matplotlib（仅绘图需要）, `src/struct/mechanism.py`（已包含）, `data/wing_analysis_results.json`（已包含）
 
 ---
 
@@ -170,7 +170,7 @@ from butterfly_forces import *
 ### 3.1 最基本用法
 
 ```python
-from butterfly_forces import SimulationConfig, ButterflyForceModel
+from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel
 
 # 设计参数 (v6.7: α_f=60°, α_b=10°)
 cfg = SimulationConfig(
@@ -223,7 +223,7 @@ print(f"稳态平均 Fz = {Fz_FL_steady.mean()*1000:.1f} mN")
 ### 3.4 参数扫描（找最优参数）
 
 ```python
-from butterfly_forces import scan_parameters
+from src.aero.butterfly_forces import scan_parameters
 
 cfg = SimulationConfig()
 
@@ -381,7 +381,7 @@ else:
 ### 场景 C：扫描最优安装角
 
 ```python
-from butterfly_forces import scan_parameters
+from src.aero.butterfly_forces import scan_parameters
 
 results = scan_parameters(
     SimulationConfig(),
@@ -470,7 +470,7 @@ out = model.simulate()
 """示例：输出蝴蝶翅膀力数据做机构分析"""
 import sys, numpy as np
 sys.path.insert(0, 'D:/code/Butterfly/src')
-from butterfly_forces import *
+from src.aero.butterfly_forces import *
 
 # 1. 配置
 cfg = SimulationConfig(

@@ -15,18 +15,18 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from butterfly_forces import (
+from src.aero.butterfly_forces import (
     SimulationConfig,
     WingGeometry,
     compute_cop_vec,
     compute_wing_forces_vec,
     rocker_decompose,
 )
-from gear_analysis import FixedAxisGearTrain
-from mechanism import wing_kinematics
+from src.gear.gear_analysis import FixedAxisGearTrain
+from src.struct.mechanism import wing_kinematics
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 OUTPUT_DIR = PROJECT_ROOT / "output"
 FIG_DIR = OUTPUT_DIR / "figures"
 REPORT_DIR = OUTPUT_DIR / "reports"

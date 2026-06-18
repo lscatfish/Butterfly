@@ -41,9 +41,9 @@ except ImportError:
         return _decorator
 
 # ---- project root for imports ----
-_PROJ = Path(__file__).parent.parent
-sys.path.insert(0, str(_PROJ / "src"))
-from mechanism import wing_kinematics, DEFAULT_PARAMS, solve_phi
+_PROJ = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(_PROJ))
+from src.struct.mechanism import wing_kinematics, DEFAULT_PARAMS, solve_phi
 
 # ============================================================
 # Dataclasses

@@ -1,6 +1,6 @@
 # 前置机构运动学模块（mechanism.py）
 
-> 本文件说明 `src/mechanism.py` 的设计原理、几何定义、接口与使用方法。
+> 本文件说明 `src/struct/mechanism.py` 的设计原理、几何定义、接口与使用方法。
 > 对应 SolidWorks 装配图中的曲柄摇杆四连杆机构，以及 MATLAB 脚本 `angularvelocity2dimensions.m` 的运动学模型。
 
 ---
@@ -221,7 +221,7 @@ for a_val in [6.0, 7.0, 7.92, 9.0, 10.0, 11.0]:
 
 | 文件 | 路径 | 说明 |
 |---|---|---|
-| 运动学模块 | `src/mechanism.py` | 核心求解器 |
-| 可视化工具 | `src/mechanism_plot.py` | 机构轨迹、运动学曲线、a 扫描 |
-| 气动分析 | `src/dynamic_analysis.py` | 调用 wing_kinematics，输出气动力报告 |
+| 运动学模块 | `src/struct/mechanism.py` | 核心求解器 |
+| 可视化工具 | `src/struct/mechanism_plot.py` | 机构轨迹、运动学曲线、a 扫描 |
+| 气动分析 | `src/aero/butterfly_forces.py` | 调用 wing_kinematics，输出气动力报告 |
 | MATLAB 参考 | `angularvelocity2dimensions.m` | 原始参考实现（直线-圆模型） |

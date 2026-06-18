@@ -14,8 +14,8 @@
 | v6 | `temp/pitch_dynamics_v6.py` | 刚性 wing, 非对称 α_install 扫描 | L/W=1.48 但俯仰全部发散 |
 | v6.1 | `temp/pitch_dynamics_v6_1.py` | +气动俯仰阻尼 Δα(θ̇_p) | L/W=1.145, 10s 全稳定, 但全在平板区 |
 | v6.2 | `temp/scan_low_alpha.py` | +低 α_install (28-45°) | L/W=0.615, LEV 范围, 64 组全稳定 |
-| v6.3 | `src/butterfly_forces.py` | +LEV/Lee C_L/C_D (C_D_max=3.22) | **L/W=1.033**, 10s STABLE, 达悬停条件 ✅ |
-| **v6.7** | `src/butterfly_forces.py` | **修正攻角定义**[32]: α=η (相对拍动平面) + tanh平滑过渡 | **L/W=2.15**, peak θ=37.6°, 物理自洽 ✅ |
+| v6.3 | `src/aero/butterfly_forces.py` | +LEV/Lee C_L/C_D (C_D_max=3.22) | **L/W=1.033**, 10s STABLE, 达悬停条件 ✅ |
+| **v6.7** | `src/aero/butterfly_forces.py` | **修正攻角定义**[32]: α=η (相对拍动平面) + tanh平滑过渡 | **L/W=2.15**, peak θ=37.6°, 物理自洽 ✅ |
 
 ### 最佳参数 (v6.3)
 
@@ -25,12 +25,12 @@
 | 60° | 10° | 0.903 | 0.993 | 45.0° | 0 | +195 mN | ✅ |
 | 60° | 12° | 0.859 | 0.948 | 43.1° | 0 | +186 mN | ✅ |
 
-### 对外力输出模块: `src/butterfly_forces.py`
+### 对外力输出模块: `src/aero/butterfly_forces.py`
 
 对外调用接口，提供完整仿真管线（运动学→俯仰ODE→力输出），**全参数可配置**：
 
 ```python
-from butterfly_forces import SimulationConfig, ButterflyForceModel, scan_parameters
+from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, scan_parameters
 
 # 单次仿真
 cfg = SimulationConfig(alpha_front_deg=60, alpha_back_deg=8, phase_diff_deg=0,
@@ -96,15 +96,21 @@ Fz = cos(ψ) × (L − sign×D)
 
 ```
 ├── src/
-│   ├── mechanism.py              # 曲柄摇杆四连杆 → φ(t), φ̇(t), φ̈(t)
-│   ├── butterfly_forces.py       # ★ 对外力输出模块 (v6.3+, v6.7攻角修正)
-│   ├── stability_analysis.py     # 方案一: 单变量偏离扫描
-│   ├── stability_plot.py         # 方案一: 稳定性绘图
-│   ├── sweep_cartesian.py        # 方案二: 笛卡尔积全扫描 (joblib并行)
-│   ├── dynamic_analysis.py       # 气动力仿真 (v3)
-│   ├── analyze_dxf.py            # DXF 几何提取 → 翅膀面积/展长/面积矩
-│   ├── alpha_scan.py             # 安装角扫描
-│   └── gear_analysis.py          # 齿轮减速比分析
+│   ├── aero/
+│   │   ├── butterfly_forces.py       # ★ 对外力输出模块 (v6.3+, v6.7攻角修正)
+│   │   ├── stability_analysis.py     # 方案一: 单变量偏离扫描
+│   │   ├── stability_plot.py         # 方案一: 稳定性绘图
+│   │   ├── sweep_cartesian.py        # 方案二: 笛卡尔积全扫描 (joblib并行)
+│   │   └── plot_wing_shape.py        # 翅膀平面形状绘制
+│   ├── struct/
+│   │   ├── mechanism.py              # 曲柄摇杆四连杆 → φ(t), φ̇(t), φ̈(t)
+│   │   ├── mechanism_plot.py         # 机构运动学可视化
+│   │   ├── four_bar_analysis.py      # 四连杆动力学分析
+│   │   ├── analyze_dxf.py            # DXF 几何提取 → 翅膀面积/展长/面积矩
+│   │   ├── mechanical_principles_analysis.py  # 机械原理分析（力流/力矩）
+│   │   └── generate_mechanical_principles_assets.py  # 机械原理报告配图生成
+│   └── gear/
+│       └── gear_analysis.py          # 两级定轴齿轮减速器分析
 ├── data/
 │   ├── WingFront.DXF / WingBack.DXF / WingsAxis.DXF
 │   └── wing_analysis_results.json
@@ -197,7 +203,7 @@ v6.6 的 82GB 扫参数据（`temp/stability/sweep_cartesian/`）基于 bug 公�
 
 ## Stability Analysis System
 
-`src/stability_analysis.py` + `src/stability_plot.py` — 插拔式稳定性分析管线:
+`src/aero/stability_analysis.py` + `src/aero/stability_plot.py` — 插拔式稳定性分析管线:
 
 ```
 analysis (stability_analysis.py) ──[JSON+NPZ]──> plot (stability_plot.py)
@@ -214,7 +220,7 @@ analysis (stability_analysis.py) ──[JSON+NPZ]──> plot (stability_plot.py
 
 ### v6.6 方案二: 9参数全笛卡尔积扫描
 
-`src/sweep_cartesian.py` — joblib 并行 + numba JIT 全组合扫描:
+`src/aero/sweep_cartesian.py` — joblib 并行 + numba JIT 全组合扫描:
 
 ```
 sweep_cartesian.py
@@ -242,18 +248,18 @@ sweep_cartesian.py
 
 ```bash
 # 基线分析
-python src/stability_analysis.py --baseline
+python src/aero/stability_analysis.py --baseline
 
 # 单变量偏离 (e.g. mech_a)
-python src/stability_analysis.py --sweep mech_a
+python src/aero/stability_analysis.py --sweep mech_a
 
 # 批量全部扫描
 python temp/run_all_sweeps.py
 
 # 出图
-python src/stability_plot.py --baseline
-python src/stability_plot.py --sweep mech_a
-python src/stability_plot.py --all
+python src/aero/stability_plot.py --baseline
+python src/aero/stability_plot.py --sweep mech_a
+python src/aero/stability_plot.py --all
 ```
 
 ### TODO
@@ -341,12 +347,12 @@ k_clap = 1.0 + k_clap_extra
 
 | 文件 | 修改内容 |
 |------|---------|
-| `src/butterfly_forces.py` | ① 新增 `compute_clap_fling_window()` 辅助函数 |
+| `src/aero/butterfly_forces.py` | ① 新增 `compute_clap_fling_window()` 辅助函数 |
 | | ② `compute_wing_forces_vec` 中替换 k_clap 计算 |
 | | ③ 预计算 k_clap 数组 (numa + Python 两路径) |
 | | ④ `SimulationConfig.k_clap` 语义变为 k_max |
-| `src/stability_analysis.py` | BASELINE_CONFIG 参数不变 (k_clap 仍为初始值) |
-| `src/sweep_cartesian.py` | BASELINE_CONFIG 同步 |
+| `src/aero/stability_analysis.py` | BASELINE_CONFIG 参数不变 (k_clap 仍为初始值) |
+| `src/aero/sweep_cartesian.py` | BASELINE_CONFIG 同步 |
 | `AGENTS.md` | 更新模型描述 + DESIGN 参数 |
 
 ### 参数重扫描 ✅ (10,326 组完成, 待扩扫)
@@ -519,10 +525,10 @@ W = 196.2 mN  # 重量 (0.020 × 9.81 × 1000)
 
 ```bash
 # v6.3 力输出模块（对外接口）
-python src/butterfly_forces.py           # 自带验证测试
+python -m src.aero.butterfly_forces      # 自带验证测试
 
 # 调用示例
-python -c "from butterfly_forces import *; cfg=SimulationConfig(); m=ButterflyForceModel(cfg); out=m.simulate(); print(out.summary)"
+python -c "from src.aero.butterfly_forces import *; cfg=SimulationConfig(); m=ButterflyForceModel(cfg); out=m.simulate(); print(out.summary)"
 
 # v6.3 全参数扫描 (99组)
 python temp/scan_v6_3.py
@@ -531,7 +537,7 @@ python temp/scan_v6_3.py
 python temp/verify_v63_long.py
 
 # 机构运动学自测
-python src/mechanism.py
+python -m src.struct.mechanism
 ```
 
 ## Critical Warnings

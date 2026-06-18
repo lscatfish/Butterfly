@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import mechanical_principles_analysis as analysis
+from src.struct import mechanical_principles_analysis as analysis
 
 
 def generate_assets(write_report_template: bool = False) -> dict[str, Path]:
