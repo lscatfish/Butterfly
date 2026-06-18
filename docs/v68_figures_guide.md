@@ -45,9 +45,9 @@
 
 `C_L/C_D` 混合模型：
 
-- `|α| ≤ 40°`: Dickinson 经验公式。
-- `40° < |α| ≤ 70°`: smoothstep 过渡。
-- `|α| > 70°`: 平板失速模型。
+- `|α| ≤ 55°`: Dickinson 经验公式。
+- `55° < |α| ≤ 65°`: smoothstep 过渡。
+- `|α| > 65°`: LEV/Lee 理论模型。
 
 ### 2.4 俯仰动力学
 
@@ -71,7 +71,7 @@ M_damp = -c_damp · θ̇_p
 
 ---
 
-## 4. 实验 / 计算流程
+## 4. 数值计算流程
 
 ```
 1. DXF 提取翅膀几何 (analyze_dxf.py)
@@ -132,15 +132,24 @@ M_damp = -c_damp · θ̇_p
 
 ### 5.4 机构与翅膀图 (`output/figures/mechanism/`)
 
+#### 代码生成图（随 DESIGN_v68 自动重绘）
+
 | 图名 | 内容 | 解读要点 |
 |------|------|---------|
 | `mechanism_analysis.png` | 四连杆运动学分析 | φ(t)、φ̇(t)、φ̈(t) 时程 |
 | `equivalent_output_torque.png` | 等效输出扭矩 | 机构驱动所需扭矩 |
 | `wing_analysis.png` | 翅膀几何分析 | 面积、展长、面积矩 |
 | `wing_shape.png` / `wing_poses.png` | 翅膀平面形状与姿态 | 安装角、拍动姿态 |
-| `曲柄摇杆受力简图.png` | 机构受力简图 | 力的传递路径 |
-| `机构简图.png` | 四连杆示意图 | 几何关系 |
-| `齿轮运动简图.png` | 齿轮减速器简图 | 传动比 |
+| `gear_force_diagram.png` / `gear_mesh_forces_vs_crank_angle.png` | 齿轮啮合力分析 | 减速器载荷 |
+| `rocker_moment_vs_crank_angle.png` / `torque_chain_vs_crank_angle.png` | 摇杆力矩 / 扭矩链 | 机构动力传递 |
+
+#### 静态示意图（尚未按 DESIGN_v68 重绘）
+
+| 图名 | 内容 | 状态 |
+|------|------|------|
+| `曲柄摇杆受力简图.png` | 机构受力简图 | 静态图，仅作示意 |
+| `机构简图.png` | 四连杆示意图 | 静态图，仅作示意 |
+| `齿轮运动简图.png` | 齿轮减速器简图 | 静态图，仅作示意 |
 
 ---
 

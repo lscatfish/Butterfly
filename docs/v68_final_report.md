@@ -44,6 +44,8 @@
 
 ### 2.2 全量 Top 10 (稳定, α_f=30-70)
 
+> ⚠️ 此表按 L/W 排序，包含 α_f≥60° 的组合。这些组合虽然数值上稳定且 L/W 高，但均值 α_eff 超出物理合理范围（见 3.1 节），不可作为最终设计依据。
+
 | # | L/W | peak_θ | α_f | α_b | ph | kc | R |
 |---|-----|--------|-----|-----|-----|-----|-----|
 | 1 | 3.892 | 27.9° | 70° | 15° | -30 | 0.5 | 2.50 |
@@ -254,4 +256,4 @@ python temp/run_all_sweeps.py
 python src/aero/stability_plot.py --all
 ```
 
-数据源: `F:/重大作业考试/26秋/机械原理/全链路气动仿真/temp/stability/sweep_cartesian/` + `temp/stability/sweep_cartesian/`
+数据源: `F:/重大作业考试/26秋/机械原理/全链路气动仿真/temp/stability/sweep_cartesian/` + `temp/stability/sweep_<param>/`

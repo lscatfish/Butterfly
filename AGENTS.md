@@ -12,18 +12,24 @@
 | 版本 | 文件 | 核心特点 | 关键结果 |
 |------|------|---------|---------|
 | v6 | `temp/pitch_dynamics_v6.py` | 刚性 wing, 非对称 α_install 扫描 | L/W=1.48 但俯仰全部发散 |
-| v6.1 | `temp/pitch_dynamics_v6_1.py` | +气动俯仰阻尼 Δα(θ̇_p) | L/W=1.145, 10s 全稳定, 但全在平板区 |
-| v6.2 | `temp/scan_low_alpha.py` | +低 α_install (28-45°) | L/W=0.615, LEV 范围, 64 组全稳定 |
-| v6.3 | `src/aero/butterfly_forces.py` | +LEV/Lee C_L/C_D (C_D_max=3.22) | **L/W=1.033**, 10s STABLE, 达悬停条件 ✅ |
 | **v6.7** | `src/aero/butterfly_forces.py` | **修正攻角定义**[32]: α=η (相对拍动平面) + tanh平滑过渡 | **L/W=2.15**, peak θ=37.6°, 物理自洽 ✅ |
+| **v6.8** | `src/aero/butterfly_forces.py` | **速度耦合 clap-fling** + 全网格扫参 + DESIGN_v68 | **L/W=2.45**, peak θ=32.9°, 物理合理 ✅ |
 
-### 最佳参数 (v6.3)
+### 最佳参数 (v6.8 DESIGN_v68)
 
-| α_f | α_b | L/W (3s) | L/W (10s) | Peak θ | n90 | Fz_body | 状态 |
-|-----|-----|----------|-----------|--------|-----|---------|------|
-| **60°** | **8°** | 0.943 | **1.033** | 46.7° | 0 | +203 mN | ✅ 悬停达成 |
-| 60° | 10° | 0.903 | 0.993 | 45.0° | 0 | +195 mN | ✅ |
-| 60° | 12° | 0.859 | 0.948 | 43.1° | 0 | +186 mN | ✅ |
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| α_f | **45°** | 前翅安装角，过渡区中部，物理合理 |
+| α_b | **8°** | 后翅安装角 |
+| phase | **-20°** | 前后翅相位差 |
+| mech_a | **6.0 mm** | 曲柄半径 |
+| mech_R | **2.50 mm** | 摇杆半径，摆幅关键 |
+| φ_offset | **-30°** | 翅膀安装偏角 |
+| f | **17 Hz** | 扑动频率 |
+| k_clap | **0.3** | 速度耦合 clap-fling k_max |
+| c_damp | **5e-4 N·m·s/rad** | 俯仰气动阻尼 |
+
+**性能**: L/W_world=2.447, peak θ=32.9°, n90=0, mean |α_eff|=45.9°
 
 ### 对外力输出模块: `src/aero/butterfly_forces.py`
 
@@ -71,12 +77,12 @@ results = scan_parameters(cfg, {
 - F_AM: 附加质量力 ∝ φ̈
 - F_clap: Clap-and-Fling（反转点增强 1.3x）
 - F_rot: 旋转力（当前 α̇=0，自然为 0）
-
 ### C_L/C_D 混合模型
+
 ```
-|α| ≤ 40°: 经验公式 (Sane & Dickinson 2002, 含 LEV 效应)
-40°<|α|≤70°: smoothstep 过渡
-|α| > 70°: 平板失速模型
+|α| ≤ 55°: 经验公式 (Sane & Dickinson 2002, 含 LEV 效应)
+55°<|α|≤65°: smoothstep 过渡
+|α| > 65°: LEV/Lee 理论模型
 ```
 
 ### 力投影（v3 验证）
@@ -279,7 +285,7 @@ python src/aero/stability_plot.py --all
 - [x] **v6.8 物理合理性校准** ✅ — 约束 α_eff≤50°, 排除 α_f≥60° 非物理结果
 - [x] **v6.8 严格单变量稳定性分析** ✅ — 7参数32值, DESIGN_v68 容差窄
 - [ ] **方案二绘图** — 交互热力图、平行坐标图、Sobol 敏感性指数
-- [ ] **清理 v6.6 废弃数据** — `temp/stability/sweep_cartesian/` 旧 bug 公式数据已迁移/废弃, 可清
+- [ ] **清理旧 bug 公式数据** — `temp/stability/` 下基于 v6.6 之前 bug 公式的数据已废弃, 可清
 
 ---
 
