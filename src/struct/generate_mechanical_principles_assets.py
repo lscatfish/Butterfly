@@ -33,7 +33,22 @@ def generate_assets(write_report_template: bool = False) -> dict[str, Path]:
         "rocker_moment": analysis.plot_rocker_moment_vs_crank_angle(results),
         "torque_chain": analysis.plot_torque_chain_vs_crank_angle(results),
         "gear_forces_angle": analysis.plot_gear_mesh_forces_vs_crank_angle(results),
+        "output_torque": analysis.plot_output_torque_time(results),
+        "system_force_flow": analysis.plot_system_force_flow(results),
     }
+
+    # 可选的受力分析图（依赖已有外部示意图时生成）
+    optional_plots = {
+        "wing_fbd": analysis.plot_wing_fbd,
+        "linkage_force_diagram": analysis.plot_linkage_force_diagram,
+        "gear_force_diagram": analysis.plot_gear_force_diagram,
+        "annotated_gear_motion_diagram": analysis.plot_annotated_existing_gear_motion_diagram,
+    }
+    for name, plot_fn in optional_plots.items():
+        try:
+            figure_paths[name] = plot_fn(results)
+        except Exception as e:
+            print(f"  [skip] {name}: {e}")
     if mechanism_schematic is not None:
         figure_paths["mechanism_schematic"] = mechanism_schematic
 

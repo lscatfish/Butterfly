@@ -26,7 +26,7 @@ import numpy as np
 
 _PROJ = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_PROJ))
-from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, _HAS_NUMBA
+from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, _HAS_NUMBA, DESIGN_v68
 
 try:
     from joblib import Parallel, delayed
@@ -39,34 +39,25 @@ except ImportError:
 OUT_ROOT = _PROJ / "temp" / "stability" / "sweep_cartesian"
 
 # ============================================================
-# v6.7 基线参数 — 攻角公式修正为文献[32]标准 (α=η相对拍动平面)
+# v6.8 基线参数 — 与 DESIGN_v68 保持一致
 # ============================================================
-BASELINE_CONFIG = dict(
-    alpha_front_deg=60, alpha_back_deg=10,
-    phase_diff_deg=-20, mech_a=6.0, mech_R=2.25,
-    phi_offset_deg=-30, rotation='cw',
-    f=17.0, rho=1.225, m_total=0.020, I_yy=3e-5, d_cg=0.015,
-    x_front=0.025, x_back=-0.025,
-    dt=50e-6, t_end=5.0, theta0_deg=0.0, steady_start=3.0,
-    k_3d=0.7, C_rot=1.5, r_rot=0.5, k_clap=0.5, c_damp=5e-4,
-)
+BASELINE_CONFIG = {**DESIGN_v68, "dt": 50e-6, "t_end": 5.0, "steady_start": 3.0}
 
 # ============================================================
-# v6.8 笛卡尔积网格 — 粗网格补扫 α_f=[30,40,60,70]
-# 4×3×3×2×3×3×1×2×1×1 = 1,296 组, 预计 ~3 min
-# α_f=50 已全覆盖 (9,000 组), 跳过
+# v6.8 默认笛卡尔积网格 — 以 DESIGN_v68 为中心的小范围加密
+# 3×3×3×1×1×2×1×1×1×2 = 108 组, 用于快速验证默认参数附近敏感度
 # ============================================================
 DEFAULT_GRID = {
-    "alpha_front_deg":  [30, 40, 60, 70],               # 4 (向下扩展 30-40°, 去已扫的 50)
-    "alpha_back_deg":   [3, 8, 15],                      # 3 (拉大步长)
-    "phase_diff_deg":   [-30, -20, -10],                 # 3 (拉大步长)
-    "mech_a":           [6, 8],                           # 2 (去 7, 数据已证明 7 远不如 6)
-    "mech_R":           [2.0, 2.25, 2.5],                # 3
-    "phi_offset_deg":   [-40, -30, -25],                 # 3 (去 -35, 就近已覆盖)
-    "f":                [17],                             # 1 (f=17 一致优于 f=15)
-    "c_damp":           [5e-4],                           # 1
-    "rotation":         ["cw"],                           # 1
-    "k_clap":           [0.3, 0.5],                       # 2 (拉大步长, 0.3 最优已确认)
+    "alpha_front_deg":  [40, 45, 50],                    # 物理合理区
+    "alpha_back_deg":   [5, 8, 10],                       # DESIGN_v68=8
+    "phase_diff_deg":   [-30, -20, -10],                  # DESIGN_v68=-20
+    "mech_a":           [6],                              # DESIGN_v68=6, 绝对最优
+    "mech_R":           [2.50],                           # DESIGN_v68=2.50
+    "phi_offset_deg":   [-30, -25],                       # DESIGN_v68=-30
+    "f":                [17],                             # DESIGN_v68=17
+    "c_damp":           [5e-4],                           # DESIGN_v68=5e-4
+    "rotation":         ["cw"],                           # DESIGN_v68=cw
+    "k_clap":           [0.3, 0.5],                       # DESIGN_v68=0.3
 }
 
 PARAM_SHORT = {

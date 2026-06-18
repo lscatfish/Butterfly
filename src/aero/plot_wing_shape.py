@@ -25,7 +25,7 @@ import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
-OUTPUT_DIR = PROJECT_ROOT / "output" / "figures"
+OUTPUT_DIR = PROJECT_ROOT / "output" / "figures" / "aero"
 
 # 复用 analyze_dxf 的解析函数
 sys.path.insert(0, str(PROJECT_ROOT))

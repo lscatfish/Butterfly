@@ -1,11 +1,11 @@
 {
   "config": {
-    "alpha_front_deg": 60.0,
-    "alpha_back_deg": 10.0,
+    "alpha_front_deg": 45.0,
+    "alpha_back_deg": 8.0,
     "phase_diff_deg": -20.0,
     "mech_a": 6.0,
     "mech_b": 6.97,
-    "mech_R": 2.25,
+    "mech_R": 2.5,
     "mech_c": 14.0,
     "mech_l": 8.0,
     "phi_offset_deg": -30.0,
@@ -18,35 +18,35 @@
   "kinematics": {
     "omega_crank_rad_s": 106.81415022205297,
     "period_s": 0.058823529411764705,
-    "raw_span_deg": 55.80087612887886,
-    "phi_min_deg": 15.177989731303555,
-    "phi_max_deg": 70.97886586018241,
-    "front_phi_dot_peak": 69.25089887056522,
-    "front_phi_ddot_peak": 12374.712844045996
+    "raw_span_deg": 63.55819735226596,
+    "phi_min_deg": 12.9051293736987,
+    "phi_max_deg": 76.46332672596466,
+    "front_phi_dot_peak": 83.14193366507592,
+    "front_phi_ddot_peak": 16832.72933388687
   },
   "power_torque": {
-    "p_aero_avg_W": 0.4196701930362884,
-    "p_total_peak_W": 33.98944400425653,
-    "p_inertial_abs_avg_W": 12.159782895133413,
-    "p_inertial_peak_W": 44.560274619375434,
-    "t_out_ideal_avg_Nm": 0.003928975628826777,
-    "t_out_ideal_peak_Nm": 0.3182110603660359,
-    "t_out_avg_Nm": 0.0043655284764741965,
-    "t_out_peak_Nm": 0.353567844851151,
-    "t_motor_avg_Nm": 0.00014346804742537564,
-    "t_motor_peak_Nm": 0.011619598544953532,
+    "p_aero_avg_W": 0.6384029386487011,
+    "p_total_peak_W": 53.63210506596192,
+    "p_inertial_abs_avg_W": 16.56994125915023,
+    "p_inertial_peak_W": 66.47449853793755,
+    "t_out_ideal_avg_Nm": 0.005976763727666634,
+    "t_out_ideal_peak_Nm": 0.502106742921866,
+    "t_out_avg_Nm": 0.006640848586296259,
+    "t_out_peak_Nm": 0.5578963810242955,
+    "t_motor_avg_Nm": 0.00021824381287577243,
+    "t_motor_peak_Nm": 0.018334619710437285,
     "weight_N": 0.1962
   },
   "gear_forces": {
     "mesh_12_peak": {
-      "Ft_N": 11.066284328527171,
-      "Fr_N": 4.027798099510438,
-      "Fn_N": 11.77649380631714
+      "Ft_N": 17.46154258136884,
+      "Fr_N": 6.355481743990084,
+      "Fn_N": 18.58218548823438
     },
     "mesh_2p3_peak": {
-      "Ft_N": 58.9279741418585,
-      "Fr_N": 21.448028553244953,
-      "Fn_N": 62.70984025880112
+      "Ft_N": 92.98273017071591,
+      "Fr_N": 33.842946082946554,
+      "Fn_N": 98.95015467180124
     }
   },
   "gear_summary": {
@@ -59,11 +59,11 @@
     "alpha_deg": 20.0
   },
   "load_chain_peaks": {
-    "M_wing_peak_Nmm": 1563.663124441586,
-    "T_crank_peak_Nmm": 353.567844851151,
-    "T_motor_peak_Nmm": 11.619598544953533,
-    "Ft12_peak_N": 11.066284328527171,
-    "Ft2p3_peak_N": 58.9279741418585
+    "M_wing_peak_Nmm": 1875.8574539837796,
+    "T_crank_peak_Nmm": 557.8963810242955,
+    "T_motor_peak_Nmm": 18.334619710437284,
+    "Ft12_peak_N": 17.46154258136884,
+    "Ft2p3_peak_N": 92.98273017071591
   },
   "geometry": {
     "Front": {

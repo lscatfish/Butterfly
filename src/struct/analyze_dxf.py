@@ -16,9 +16,10 @@ import json
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = PROJECT_ROOT / 'data'
 OUTPUT_DIR = PROJECT_ROOT / 'output'
+FIGURES_DIR = OUTPUT_DIR / 'figures' / 'aero'
 MM_TO_M = 1e-3
 
 # ==================== 用户设计参数 ====================
@@ -372,8 +373,10 @@ def plot_results(axis, front_prop, back_prop, output_dir):
     ax6.axis('off')
     
     plt.tight_layout()
-    plt.savefig(output_dir / 'wing_analysis.png', dpi=200, bbox_inches='tight')
-    print(f'Saved: {output_dir / "wing_analysis.png"}')
+    output_path = output_dir / 'wing_analysis.png'
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_path, dpi=200, bbox_inches='tight')
+    print(f'Saved: {output_path}')
     plt.close()
 
 
@@ -381,6 +384,8 @@ def main():
     print("=" * 70)
     print("BUTTERFLY WING AERODYNAMIC ANALYSIS")
     print("=" * 70)
+    
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     
     axis = read_axis_from_dxf(DATA_DIR / 'WingsAxis.DXF')
     print(f"\n[Axis]  p0=({axis['p0'][0]:.2f},{axis['p0'][1]:.2f})  p1=({axis['p1'][0]:.2f},{axis['p1'][1]:.2f})  "
@@ -435,10 +440,8 @@ def main():
         chord_df.to_csv(tables_dir / 'chord_distribution.csv', index=False)
         print(f"Saved output/tables/chord_distribution.csv")
     
-    # 保存图表到 output/figures/
-    figures_dir = OUTPUT_DIR / 'figures'
-    figures_dir.mkdir(parents=True, exist_ok=True)
-    plot_results(axis, front_prop, back_prop, figures_dir)
+    # 保存图表到 output/figures/aero/
+    plot_results(axis, front_prop, back_prop, FIGURES_DIR)
     print("\nDone!")
 
 

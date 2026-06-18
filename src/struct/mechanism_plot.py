@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-OUTPUT_DIR = ROOT / "output" / "figures"
+OUTPUT_DIR = ROOT / "output" / "figures" / "mechanism"
 
 from src.struct.mechanism import DEFAULT_PARAMS, solve_phi, wing_kinematics
 

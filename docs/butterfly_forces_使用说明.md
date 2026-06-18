@@ -1,18 +1,18 @@
 # butterfly_forces.py 使用说明
 
-> 蝴蝶扑翼力输出模块 — v6.7 文献标准攻角定义
+> 蝴蝶扑翼力输出模块 — v6.8 速度耦合 Clap-and-Fling 模型
 
-**当前版本：v6.7** | 攻角公式修正为文献[32]标准 | 设计参数：α_f=60°, α_b=10°
+**当前版本：v6.8** | 攻角公式修正为文献[32]标准 | 设计参数：α_f=45°, α_b=8° (DESIGN_v68)
 
 ---
 
-## 0. 这玩意儿是干啥的？
+## 0. 模块用途
 
-一句话：**输入蝴蝶的设计参数，输出每只翅膀上受到的力和力矩。**
+**输入蝴蝶的设计参数，输出每只翅膀上受到的力和力矩。**
 
-你要分析摇杆（四连杆机构的输出端）受多大的力？曲柄需要多大扭矩？翅膀上气动力怎么分布的？——调这个模块就行。
+用于分析摇杆（四连杆机构的输出端）受力、曲柄所需扭矩、翅膀气动力分布等。
 
-### v6.7 关键修正
+### v6.8 关键修正
 
 **攻角定义**改为文献[32]标准：攻角 = 翅膀弦线相对**拍动平面**（体轴 XZ 平面）的角度。
 
@@ -23,6 +23,7 @@
 - η = α_install：翅膀相对拍动平面的安装角
 - φ 和 θ_p **不进入攻角**——它们通过力投影和重力矩体现
 - 上下拍符号翻转用 **tanh 平滑过渡**（消除力突变）
+- Clap-and-Fling 增强改为**速度-位置耦合**（Lighthill 公式启发），端点处自动归零
 
 ---
 
@@ -172,10 +173,10 @@ from src.aero.butterfly_forces import *
 ```python
 from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel
 
-# 设计参数 (v6.7: α_f=60°, α_b=10°)
+# 设计参数 (v6.8 DESIGN_v68: α_f=45°, α_b=8°)
 cfg = SimulationConfig(
-    alpha_front_deg=60, alpha_back_deg=10,
-    phase_diff_deg=-20, mech_a=6, mech_R=2.25,
+    alpha_front_deg=45, alpha_back_deg=8,
+    phase_diff_deg=-20, mech_a=6, mech_R=2.50,
     phi_offset_deg=-30, f=17, c_damp=5e-4, rotation='cw',
 )
 model = ButterflyForceModel(cfg)
@@ -185,7 +186,7 @@ out = model.simulate()
 
 # 看结果
 print(out.summary)
-# → {'L/W': 2.15, 'peak_theta_deg': 37.6, 'n_exceed_90': 0, ...}
+# → {'L/W': 2.45, 'peak_theta_deg': 32.9, 'n_exceed_90': 0, ...}
 
 # 拿前翅左的体轴力
 F_FL = out.wings["FL"].force_body   # shape: (N, 3) — [Fx, Fy, Fz] 每行
@@ -303,21 +304,21 @@ out.config         # SimulationConfig, 回记用的参数
 @dataclass
 class SimulationConfig:
     # ===== 翅膀安装 =====
-    alpha_front_deg: float = 60.0     # 前翅安装角 [°] — 翅膀弦线相对拍动平面的角度
-    alpha_back_deg: float = 10.0      # 后翅安装角 [°]
+    alpha_front_deg: float = 45.0     # 前翅安装角 [°] — DESIGN_v68
+    alpha_back_deg: float = 8.0       # 后翅安装角 [°] — DESIGN_v68
     phase_diff_deg: float = -20.0     # 前后翅相位差 [°] — 0=同相, 180=反相
 
     # ===== 四连杆机构 =====
-    mech_a: float = 6.0               # 铰链 A 的 y 坐标 [mm] — 改这个影响摆幅和急回比
+    mech_a: float = 6.0               # 铰链 A 的 y 坐标 [mm] — DESIGN_v68
     mech_b: float = 6.97              # 曲柄中心 x 坐标 [mm]
-    mech_R: float = 2.25              # 曲柄半径 [mm] — 改这个直接改摆幅
+    mech_R: float = 2.50              # 曲柄半径 [mm] — DESIGN_v68 (直接改摆幅)
     mech_c: float = 14.00             # 连杆长度 [mm]
     mech_l: float = 8.00              # 摇杆长度 [mm]
-    phi_offset_deg: float = -30.0     # 翅膀在摇杆上的安装偏角 [°]
+    phi_offset_deg: float = -30.0     # 翅膀在摇杆上的安装偏角 [°] — DESIGN_v68
     rotation: str = 'cw'              # 曲柄转向 'cw' 或 'ccw'
 
     # ===== 物理 =====
-    f: float = 17.0                   # 扑动频率 [Hz]
+    f: float = 17.0                   # 扑动频率 [Hz] — DESIGN_v68
     rho: float = 1.225                # 空气密度 [kg/m³]
     m_total: float = 0.020            # 总质量 [kg]
     I_yy: float = 3e-5                # 俯仰转动惯量 [kg·m²]
@@ -336,7 +337,7 @@ class SimulationConfig:
     k_3d: float = 0.7                 # 3D 展向修正
     C_rot: float = 1.5                # 旋转力系数
     r_rot: float = 0.5                # 旋转力展向位置
-    k_clap: float = 1.3               # Clap-and-Fling 增强系数
+    k_clap: float = 0.3               # Clap-and-Fling 最大增强系数 k_max — DESIGN_v68
     c_damp: float = 5e-4              # 俯仰阻尼 [N·m·s/rad]
 ```
 
@@ -347,7 +348,9 @@ class SimulationConfig:
 ### 场景 A：机构分析（摇杆/连杆受力）
 
 ```python
-cfg = SimulationConfig(alpha_front_deg=60, alpha_back_deg=10, dt=10e-6, t_end=10.0)
+cfg = SimulationConfig(
+    alpha_front_deg=45, alpha_back_deg=8, dt=10e-6, t_end=10.0
+)
 model = ButterflyForceModel(cfg)
 out = model.simulate()
 
@@ -385,7 +388,7 @@ from src.aero.butterfly_forces import scan_parameters
 
 results = scan_parameters(
     SimulationConfig(),
-    {"alpha_front_deg": range(40, 65, 5), "alpha_back_deg": range(5, 20, 2)},
+    {"alpha_front_deg": range(40, 55, 5), "alpha_back_deg": range(5, 12, 3)},
     t_end=3.0, dt=50e-6,   # 扫描用粗步长提速
 )
 # 导出 CSV
@@ -443,7 +446,7 @@ out = model.simulate()
 |α| ≥ 65°: LEV/Lee 理论 (C_L=1.866sin(2α), C_D=0.393+1.414(1−cos(2α)))
 ```
 
-- 当前设计 α_f=60° 时 α_eff≈±60°, 处于 Dickinson 峰值区 (CL_max≈1.8 @ α≈45-50°)
+- 当前设计 α_f=45° 时 α_eff≈±46°, 处于 Dickinson 峰值区 (CL_max≈1.8 @ α≈45-50°)
 - 参考：文献 [11][26] (Dickinson), [32] JRSI 2017 (LEV), [24] 机器人 2025 (Lee)
 
 ---
@@ -457,9 +460,9 @@ out = model.simulate()
 | **平动力** (F_trans) | 翅膀拍动产生的升力/阻力 | ∝ U²·S·C_L/C_D |
 | **附加质量力** (F_AM) | 翅膀加减速推动周围空气 | ∝ φ̈·c²·R·sin(α) |
 | **旋转力** (F_rot) | 翅膀主动扭转 | ∝ α̇·φ̇（当前 α̇=0，此项为 0） |
-| **Clap-and-Fling** | 翅膀在反转点拍合/打开 | 反转点附近 ×1.3 |
+| **Clap-and-Fling** | 翅膀在反转点拍合/打开 | 速度-位置耦合增强：`k_clap = 1.0 + k_max·(|φ̇|/φ̇_peak)·cos²(窗)` |
 
-所有力在反转点（|φ̇| < 10% 峰值）乘 `k_clap=1.3`。
+所有力在反转点附近通过 `k_clap` 做速度-位置耦合增强。`k_max = 0.3`（DESIGN_v68），端点处 `φ̇→0` 时增强自动归零，力曲线光滑无突变。
 
 ---
 
@@ -474,8 +477,8 @@ from src.aero.butterfly_forces import *
 
 # 1. 配置
 cfg = SimulationConfig(
-    alpha_front_deg=60, alpha_back_deg=10,
-    phase_diff_deg=-20, mech_a=6, mech_R=2.25,
+    alpha_front_deg=45, alpha_back_deg=8,
+    phase_diff_deg=-20, mech_a=6, mech_R=2.50,
     phi_offset_deg=-30, f=17, c_damp=5e-4, rotation='cw',
     dt=10e-6, t_end=10.0, steady_start=5.0,
 )
