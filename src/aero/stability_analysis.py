@@ -25,25 +25,16 @@ import numpy as np
 
 _PROJ = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_PROJ))
-from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel
+from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, DESIGN_v68
 
 OUT_ROOT = _PROJ / "temp" / "stability"
 BASELINE_DIR = OUT_ROOT / "baseline"
 
 
 # ============================================================
-# 基线参数 (文献修正公式, α_geom=α_install, L/W_world≈2.25)
-# v6.7: 攻角定义修正为文献[32]标准 (翅膀弦线相对拍动平面)
+# 基线参数 — 与 SimulationConfig / DESIGN_v68 保持一致
 # ============================================================
-BASELINE_CONFIG = dict(
-    alpha_front_deg=60, alpha_back_deg=10,
-    phase_diff_deg=-20, mech_a=6.0, mech_R=2.25,
-    phi_offset_deg=-30, rotation='cw',
-    f=17.0, rho=1.225, m_total=0.020, I_yy=3e-5, d_cg=0.015,
-    x_front=0.025, x_back=-0.025,
-    dt=50e-6, t_end=5.0, theta0_deg=0.0, steady_start=3.0,
-    k_3d=0.7, C_rot=1.5, r_rot=0.5, k_clap=0.5, c_damp=5e-4,
-)
+BASELINE_CONFIG = {**DESIGN_v68, "dt": 50e-6, "t_end": 5.0, "steady_start": 3.0}
 
 # ============================================================
 # 扫描方案: 基于文献修正公式的参数范围

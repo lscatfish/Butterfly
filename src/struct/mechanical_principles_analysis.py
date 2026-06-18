@@ -158,17 +158,17 @@ def four_wing_series(front: dict, back: dict) -> dict:
 
 def compute_results() -> dict:
     cfg = SimulationConfig(
-        alpha_front_deg=60.0,
-        alpha_back_deg=10.0,
-        phase_diff_deg=-20.0,
-        mech_a=6.0,
-        mech_R=2.25,
-        phi_offset_deg=-30.0,
-        f=17.0,
-        rotation="cw",
-        c_damp=5e-4,
-        t_end=1.0 / 17.0,
-        dt=(1.0 / 17.0) / 720.0,
+        alpha_front_deg=DESIGN_v68["alpha_front_deg"],
+        alpha_back_deg=DESIGN_v68["alpha_back_deg"],
+        phase_diff_deg=DESIGN_v68["phase_diff_deg"],
+        mech_a=DESIGN_v68["mech_a"],
+        mech_R=DESIGN_v68["mech_R"],
+        phi_offset_deg=DESIGN_v68["phi_offset_deg"],
+        f=DESIGN_v68["f"],
+        rotation=DESIGN_v68["rotation"],
+        c_damp=DESIGN_v68["c_damp"],
+        t_end=1.0 / DESIGN_v68["f"],
+        dt=(1.0 / DESIGN_v68["f"]) / 720.0,
         steady_start=0.0,
     )
     params = {"f": cfg.f, "m_total": cfg.m_total, "rho": cfg.rho}

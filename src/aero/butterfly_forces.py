@@ -61,46 +61,78 @@ class WingGeometry:
     AR: float         # 展弦比
 
 
+# ---- 共享设计参数: v6.8 最终推荐 (物理合理性约束) ----
+DESIGN_v68 = {
+    "alpha_front_deg": 45.0,
+    "alpha_back_deg": 8.0,
+    "phase_diff_deg": -20.0,
+    "mech_a": 6.0,
+    "mech_b": 6.97,
+    "mech_R": 2.50,
+    "mech_c": 14.00,
+    "mech_l": 8.00,
+    "phi_offset_deg": -30.0,
+    "rotation": "cw",
+    "f": 17.0,
+    "rho": 1.225,
+    "m_total": 0.020,
+    "I_yy": 3e-5,
+    "d_cg": 0.015,
+    "x_front": 0.025,
+    "x_back": -0.025,
+    "g": 9.81,
+    "k_3d": 0.7,
+    "C_rot": 1.5,
+    "r_rot": 0.5,
+    "k_clap": 0.3,
+    "c_damp": 5e-4,
+    "dt": 10e-6,
+    "t_end": 10.0,
+    "theta0_deg": 0.0,
+    "steady_start": 5.0,
+}
+
+
 @dataclass
 class SimulationConfig:
     """仿真全参数配置 — 所有参数可被scan覆盖."""
 
     # ---- 翅膀安装 ----
-    alpha_front_deg: float = 45.0     # 前翅安装角 [°] — DESIGN_v68
-    alpha_back_deg: float = 8.0       # 后翅安装角 [°] — DESIGN_v68
-    phase_diff_deg: float = -20.0     # 前后翅相位差 [°]
+    alpha_front_deg: float = DESIGN_v68["alpha_front_deg"]
+    alpha_back_deg: float = DESIGN_v68["alpha_back_deg"]
+    phase_diff_deg: float = DESIGN_v68["phase_diff_deg"]
 
     # ---- 四连杆机构 ----
-    mech_a: float = 6.0               # 铰链A的y坐标 [mm] — DESIGN_v68
-    mech_b: float = 6.97              # 曲柄中心x坐标 [mm]
-    mech_R: float = 2.50              # 曲柄半径 [mm] — DESIGN_v68
-    mech_c: float = 14.00             # 连杆长度 [mm]
-    mech_l: float = 8.00              # 摇杆长度 [mm]
-    phi_offset_deg: float = -30.0     # 翅膀安装偏角 [°] — DESIGN_v68
-    rotation: str = 'cw'              # 曲柄转向
+    mech_a: float = DESIGN_v68["mech_a"]
+    mech_b: float = DESIGN_v68["mech_b"]
+    mech_R: float = DESIGN_v68["mech_R"]
+    mech_c: float = DESIGN_v68["mech_c"]
+    mech_l: float = DESIGN_v68["mech_l"]
+    phi_offset_deg: float = DESIGN_v68["phi_offset_deg"]
+    rotation: str = DESIGN_v68["rotation"]
 
     # ---- 物理 ----
-    f: float = 17.0                   # 拍动频率 [Hz] — DESIGN_v68
-    rho: float = 1.225                # 空气密度 [kg/m³]
-    m_total: float = 0.020            # 总质量 [kg]
-    I_yy: float = 3e-5                # 俯仰惯量 [kg·m²]
-    d_cg: float = 0.015               # CG在铰链下方距离 [m]
-    x_front: float = 0.025            # 前翅x位置 [m]
-    x_back: float = -0.025            # 后翅x位置 [m]
-    g: float = 9.81
+    f: float = DESIGN_v68["f"]
+    rho: float = DESIGN_v68["rho"]
+    m_total: float = DESIGN_v68["m_total"]
+    I_yy: float = DESIGN_v68["I_yy"]
+    d_cg: float = DESIGN_v68["d_cg"]
+    x_front: float = DESIGN_v68["x_front"]
+    x_back: float = DESIGN_v68["x_back"]
+    g: float = DESIGN_v68["g"]
 
     # ---- 数值 ----
-    dt: float = 10e-6                 # 时间步长 [s]
-    t_end: float = 10.0               # 仿真总时间 [s]
-    theta0_deg: float = 0.0           # 初始俯仰角 [°]
-    steady_start: float = 5.0         # 稳态起始时间 [s]
+    dt: float = DESIGN_v68["dt"]
+    t_end: float = DESIGN_v68["t_end"]
+    theta0_deg: float = DESIGN_v68["theta0_deg"]
+    steady_start: float = DESIGN_v68["steady_start"]
 
     # ---- 气动系数 ----
-    k_3d: float = 0.7
-    C_rot: float = 1.5
-    r_rot: float = 0.5
-    k_clap: float = 0.3               # clap-fling 速度耦合增强系数 k_max — DESIGN_v68
-    c_damp: float = 5e-4              # 人工俯仰阻尼 [N·m·s/rad]
+    k_3d: float = DESIGN_v68["k_3d"]
+    C_rot: float = DESIGN_v68["C_rot"]
+    r_rot: float = DESIGN_v68["r_rot"]
+    k_clap: float = DESIGN_v68["k_clap"]
+    c_damp: float = DESIGN_v68["c_damp"]
 
     def to_mech_params(self) -> dict:
         return {

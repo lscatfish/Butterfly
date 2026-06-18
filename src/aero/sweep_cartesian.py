@@ -26,7 +26,7 @@ import numpy as np
 
 _PROJ = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_PROJ))
-from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, _HAS_NUMBA
+from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, _HAS_NUMBA, DESIGN_v68
 
 try:
     from joblib import Parallel, delayed
@@ -39,17 +39,9 @@ except ImportError:
 OUT_ROOT = _PROJ / "temp" / "stability" / "sweep_cartesian"
 
 # ============================================================
-# v6.8 基线参数 — DESIGN_v68 最终推荐
+# v6.8 基线参数 — 与 DESIGN_v68 保持一致
 # ============================================================
-BASELINE_CONFIG = dict(
-    alpha_front_deg=45, alpha_back_deg=8,
-    phase_diff_deg=-20, mech_a=6.0, mech_R=2.50,
-    phi_offset_deg=-30, rotation='cw',
-    f=17.0, rho=1.225, m_total=0.020, I_yy=3e-5, d_cg=0.015,
-    x_front=0.025, x_back=-0.025,
-    dt=50e-6, t_end=5.0, theta0_deg=0.0, steady_start=3.0,
-    k_3d=0.7, C_rot=1.5, r_rot=0.5, k_clap=0.3, c_damp=5e-4,
-)
+BASELINE_CONFIG = {**DESIGN_v68, "dt": 50e-6, "t_end": 5.0, "steady_start": 3.0}
 
 # ============================================================
 # v6.8 默认笛卡尔积网格 — 以 DESIGN_v68 为中心的小范围加密
