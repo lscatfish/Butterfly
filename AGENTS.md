@@ -374,13 +374,12 @@ k_clap = 1.0 + k_clap_extra
 ## Key Parameters
 
 ```python
-# v6.7 设计参数 (L/W_world=2.15, Fz_world=+422mN, peak θ=37.6°, 5s稳定)
-# v6.7 设计参数 (L/W_world=2.15, Fz_world=+422mN, peak θ=37.6°, 5s稳定)
+# v6.8 设计参数 (L/W_world=2.45, Fz_world=+469mN, peak θ=32.9°, 5s稳定)
 # 攻角定义修正为文献[32]标准: α=η (翅膀相对拍动平面)
-# k_clap=0.5 为 v6.8 速度耦合 clap-fling 参数 (待扫参标定)
-DESIGN_v67 = {"alpha_front_deg":60, "alpha_back_deg":10, "phase_diff_deg":-20,
-              "mech_a":6.0, "mech_R":2.25, "phi_offset_deg":-30,
-              "f":17.0, "c_damp":5e-4, "rotation":"cw", "k_clap":0.5}
+# k_clap=0.3 为 v6.8 速度耦合 clap-fling k_max (已扫参标定)
+DESIGN_v68 = {"alpha_front_deg":45, "alpha_back_deg":8, "phase_diff_deg":-20,
+              "mech_a":6.0, "mech_R":2.50, "phi_offset_deg":-30,
+              "f":17.0, "c_damp":5e-4, "rotation":"cw", "k_clap":0.3}
 ```
 
 ### 设计参数 (v6.8) ⭐ FINAL — 物理合理性约束
