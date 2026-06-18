@@ -29,7 +29,7 @@ from src.struct.mechanism import wing_kinematics
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 OUTPUT_DIR = PROJECT_ROOT / "output"
-FIG_DIR = OUTPUT_DIR / "figures"
+FIG_DIR = OUTPUT_DIR / "figures" / "mechanism"
 REPORT_DIR = OUTPUT_DIR / "reports"
 DATA_DIR = PROJECT_ROOT / "data"
 

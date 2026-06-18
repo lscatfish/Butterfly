@@ -35,7 +35,7 @@ SWEEP_DIRS = [
     Path("F:/重大作业考试/26秋/机械原理/全链路气动仿真/temp/stability/sweep_cartesian"),
     Path("temp/stability/sweep_cartesian"),
 ]
-FIG_DIR = Path("output/figures")
+FIG_DIR = Path("output/figures/aero/v68")
 DESIGN_DATA_DIR = Path("temp/design_v68_detail")
 
 COLORS = {

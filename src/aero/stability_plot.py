@@ -19,7 +19,7 @@ sys.path.insert(0, str(_PROJ))
 from src.aero.butterfly_forces import DESIGN_v68
 
 STABILITY_DIR = _PROJ / "temp" / "stability"
-OUT_DIR = STABILITY_DIR / "figures"
+OUT_DIR = _PROJ / "output" / "figures" / "stability"
 BASELINE_DIR = STABILITY_DIR / "baseline"
 
 # 基线参数 (与 stability_analysis.py / DESIGN_v68 保持一致)
