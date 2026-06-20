@@ -126,10 +126,11 @@ def run_pandoc(md_path):
         "pandoc",
         str(md_path),
         "-o", str(output_docx),
-        "--from=markdown+tex_math_dollars",
+        "--from=markdown+tex_math_dollars+tex_math_single_backslash",
         "--to=docx",
         "--resource-path=" + str(PROJECT_ROOT),
         "--wrap=none",
+        "--mathjax",
     ]
 
     print(f"  Running: {' '.join(cmd)}")
@@ -277,9 +278,36 @@ def format_document(docx_path):
     def ensure_black(run):
         run.font.color.rgb = RGBColor(0, 0, 0)
 
+    # --- 设置公式字体为 Cambria Math ---
+    def set_math_font(element):
+        """递归设置 OMML 数学元素的字体为 Cambria Math"""
+        # 设置数学字体
+        rpr = element.find(qn('m:rPr'))
+        if rpr is None:
+            rpr = parse_xml(f'<m:rPr {nsdecls("m")}/>')
+            element.insert(0, rpr)
+        
+        # 查找或创建字体元素
+        rFonts = rpr.find(qn('m:rFonts'))
+        if rFonts is None:
+            rFonts = parse_xml(f'<m:rFonts {nsdecls("m")} m:ascii="Cambria Math" m:hAnsi="Cambria Math"/>')
+            rpr.append(rFonts)
+        else:
+            rFonts.set(qn('m:ascii'), 'Cambria Math')
+            rFonts.set(qn('m:hAnsi'), 'Cambria Math')
+        
+        # 递归处理子元素
+        for child in element:
+            if child.tag.endswith('oMath') or child.tag.endswith('oMathPara'):
+                set_math_font(child)
+
     # --- 遍历段落应用格式 ---
     for para in doc.paragraphs:
         text = para.text.strip()
+
+        # 设置段落中所有公式字体（包括行内公式和块公式）
+        for math_elem in para._element.iter(qn('m:oMath')):
+            set_math_font(math_elem)
 
         # 章标题 (H1): # 开头
         if para.style.name == 'Heading 1':

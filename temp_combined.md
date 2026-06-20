@@ -40,7 +40,7 @@
 | 连杆长度$c$ | 14.00 | mm |
 | 摇杆长度$l$ | 8.00 | mm |
 | 摇杆转轴高度$a$ | 6.0 | mm |
-| 总传动比$|i_{13}|$ | 32.653 | — |
+| 总传动比$\lvert i_{13}\rvert$ | 32.653 | — |
 
 ## 1.3 机械原理分析任务与技术路线
 
@@ -576,9 +576,9 @@ $$C_D=0.393+1.414(1-\cos(2\alpha)),\quad |\alpha|>65° \tag{6-6}$$
 
 | 攻角范围 | $C_L$模型 | $C_D$模型 | 说明 |
 |:---|:---|:---|:---|
-| $|\alpha|\leq55°$ | Dickinson经验公式 | Dickinson经验公式 | 含LEV效应 |
-| $55°<|\alpha|\leq65°$ | smoothstep过渡 | smoothstep过渡 | 平滑衔接 |
-| $|\alpha|>65°$ | LEV/Lee理论 | LEV/Lee理论 | 平板失速区 |
+| $\lvert\alpha\rvert\leq55°$ | Dickinson经验公式 | Dickinson经验公式 | 含LEV效应 |
+| $55°<\lvert\alpha\rvert\leq65°$ | smoothstep过渡 | smoothstep过渡 | 平滑衔接 |
+| $\lvert\alpha\rvert>65°$ | LEV/Lee理论 | LEV/Lee理论 | 平板失速区 |
 
 ## 6.4 四分量气动模型
 
@@ -643,7 +643,7 @@ $$M_\mathrm{damp}=-c_\mathrm{damp}\dot{\theta}_p \tag{6-15}$$
 | 超90°次数 | 0 |
 | 稳态$\theta_p$均值 | 14.9° |
 | 稳态$\theta_p$振幅 | $\pm6.6°$ |
-| 均值$|\alpha_\mathrm{eff}|$（前翅） | 45.9° |
+| 均值$\lvert\alpha_\mathrm{eff}\rvert$（前翅） | 45.9° |
 | $\alpha_\mathrm{eff}>70°$占比 | 2.3% |
 
 ![俯仰动力学状态和力矩响应](D:\code\Butterfly\output\figures\stability\baseline\baseline_overview.png)
