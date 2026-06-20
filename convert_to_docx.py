@@ -101,6 +101,13 @@ def concatenate_markdown():
             content
         )
 
+        # 直引号 → 中文弯引号（仅处理成对出现的 "..."，避免代码块和公式内的引号被替换）
+        content = re.sub(
+            r'(?<![\\"])"([^"\n]+?)"(?!["])',
+            lambda m: f'“{m.group(1)}”',
+            content
+        )
+
         combined.append(content)
         combined.append("\n\n")  # 章节间空行
 
@@ -126,7 +133,7 @@ def run_pandoc(md_path):
         "pandoc",
         str(md_path),
         "-o", str(output_docx),
-        "--from=markdown+tex_math_dollars+tex_math_single_backslash",
+        "--from=markdown-smart+tex_math_dollars+tex_math_single_backslash",
         "--to=docx",
         "--resource-path=" + str(PROJECT_ROOT),
         "--wrap=none",
