@@ -11,19 +11,18 @@ import os
 import csv
 
 # ==================== 机构参数 ====================
-l1 = 2.25          # BP1 曲柄长度
+l1 = 2.50          # BP1 曲柄长度
 l2 = 14.0          # P2P1 连杆长度
-l3 = 7.92          # AP2 摇杆长度
-bx = 13.94 / 2.0   # B点x坐标
-h_default = 10.0   # 默认A点高度
-h_min, h_max, h_step = 6.0, 14.0, 0.5
+l3 = 8.0           # AP2 摇杆长度
+bx = 6.97          # B点x坐标
+omega1 = 2.0 * np.pi * 17.0  # 曲柄匀角速度 (rad/s)
+
+out_dir = r"D:\code\Butterfly\output\figures\mechanism"
+
+h_default = 6.0
+h_min, h_max, h_step = 6.0, 6.0, 0.5
 h_values = np.arange(h_min, h_max + h_step/2, h_step)
 
-omega1 = 1.0  #可改成动态角速度
-# 曲柄匀角速度 (rad/s)
-
-out_dir = r"your_file_location"
-os.makedirs(out_dir, exist_ok=True)
 
 
 # ==================== 核心运动学求解 ====================
