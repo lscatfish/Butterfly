@@ -180,7 +180,7 @@ def format_table_三線表(table):
 
     # 设置表头行下边框（栏目线）
     if len(table.rows) > 1:
-        header_row = table.rows[1]  # 第一行数据行（跳过可能的标题行）
+        header_row = table.rows[0]  # 第一行为表头
         for cell in header_row.cells:
             tc = cell._tc
             tcPr = tc.tcPr if tc.tcPr is not None else parse_xml(f'<w:tcPr {nsdecls("w")}/>')
