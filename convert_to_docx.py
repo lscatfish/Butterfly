@@ -133,7 +133,7 @@ def run_pandoc(md_path):
     ]
 
     print(f"  Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, encoding='utf-8')
 
     if result.returncode != 0:
         print(f"  pandoc ERROR: {result.stderr}")
