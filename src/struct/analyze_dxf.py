@@ -279,10 +279,10 @@ def calculate_wing(pts, axis, wing_name, n_bins=200):
 
 
 def plot_results(axis, front_prop, back_prop, output_dir):
-    fig = plt.figure(figsize=(18, 12))
-    
+    fig = plt.figure(figsize=(12, 10))
+
     # 1. DXF Global
-    ax1 = fig.add_subplot(2, 3, 1)
+    ax1 = fig.add_subplot(2, 2, 1)
     for prop, color, lbl in [(front_prop, 'blue', 'Front'), (back_prop, 'green', 'Back')]:
         if prop:
             pts = prop['pts']
@@ -295,9 +295,9 @@ def plot_results(axis, front_prop, back_prop, output_dir):
     ax1.set_title('Wing Planform (DXF)')
     ax1.legend(loc='upper right')
     ax1.grid(True, alpha=0.3)
-    
-    # 2. Local coords
-    ax2 = fig.add_subplot(2, 3, 2)
+
+    # 2. Local coordinates (spanwise vs chordwise)
+    ax2 = fig.add_subplot(2, 2, 2)
     for prop, color in [(front_prop, 'blue'), (back_prop, 'green')]:
         if prop:
             pts = prop['pts']
@@ -311,21 +311,21 @@ def plot_results(axis, front_prop, back_prop, output_dir):
     ax2.set_title('Local Coordinates')
     ax2.legend()
     ax2.grid(True, alpha=0.3)
-    
+
     # 3. Chord distribution
-    ax3 = fig.add_subplot(2, 3, 3)
+    ax3 = fig.add_subplot(2, 2, 3)
     for prop, color in [(front_prop, 'blue'), (back_prop, 'green')]:
         if prop:
             ax3.plot(prop['y_hat'], prop['c_hat'], color=color, lw=2, label=prop['name'])
     ax3.axhline(y=1.0, color='k', linestyle='--', lw=1, alpha=0.5)
-    ax3.set_xlabel('y_hat = (y-y_min)/R')
-    ax3.set_ylabel('c_hat = c/c_avg')
-    ax3.set_title('Chord Distribution')
+    ax3.set_xlabel(r'$\hat{y}=(y-y_{\min})/R_w$')
+    ax3.set_ylabel(r'$\hat{c}=c/\bar{c}$')
+    ax3.set_title('Normalized Chord Distribution')
     ax3.legend()
     ax3.grid(True, alpha=0.3)
-    
-    # 4. Local filled
-    ax4 = fig.add_subplot(2, 3, 4)
+
+    # 4. Local filled planform (rotated to spanwise-chordwise view)
+    ax4 = fig.add_subplot(2, 2, 4)
     for prop, color in [(front_prop, 'blue'), (back_prop, 'green')]:
         if prop:
             pts = prop['pts']
@@ -335,43 +335,11 @@ def plot_results(axis, front_prop, back_prop, output_dir):
             ax4.fill(y, r, alpha=0.3, color=color)
             ax4.plot(y, r, color=color, lw=0.5)
     ax4.axvline(x=0, color='r', linestyle='--', lw=1)
-    ax4.set_xlabel('y (mm)')
-    ax4.set_ylabel('r (mm)')
-    ax4.set_title('Local Filled')
+    ax4.set_xlabel('y: spanwise (mm)')
+    ax4.set_ylabel('r: chordwise (mm)')
+    ax4.set_title('Local Filled Planform')
     ax4.grid(True, alpha=0.3)
-    
-    # 5. 参数表
-    ax5 = fig.add_subplot(2, 3, 5)
-    ax5.axis('off')
-    rows = []
-    for p in [front_prop, back_prop]:
-        if p:
-            rows.append([p['name'], f"{p['S_mm2']:.1f}", f"{p['R_mm']:.1f}",
-                         f"{p['c_avg_mm']:.1f}", f"{p['AR']:.2f}", f"{p['r2_sq']:.4f}"])
-    if rows:
-        tbl = ax5.table(cellText=rows,
-                        colLabels=['Wing', 'S(mm2)', 'R(mm)', 'c_avg(mm)', 'AR', 'r2_sq'],
-                        loc='center', cellLoc='center')
-        tbl.auto_set_font_size(False)
-        tbl.set_fontsize(10)
-        tbl.scale(1.2, 1.8)
-    
-    # 6. 力分解柱状图（峰值）
-    ax6 = fig.add_subplot(2, 3, 6)
-    names = []
-    lift_vals = []
-    drag_vals = []
-    rot_vals = []
-    am_vals = []
-    for p in [front_prop, back_prop]:
-        if p:
-            names.append(p['name'])
-    
-    # 需要 aero 结果才能画图，这里简化留空或后续补
-    ax6.text(0.5, 0.5, 'See console output\nfor force breakdown', ha='center', va='center', fontsize=12)
-    ax6.set_title('Force Breakdown (console)')
-    ax6.axis('off')
-    
+
     plt.tight_layout()
     output_path = output_dir / 'wing_analysis.png'
     output_path.parent.mkdir(parents=True, exist_ok=True)
