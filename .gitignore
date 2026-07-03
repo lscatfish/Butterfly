@@ -1,40 +1,7 @@
-# SolidWorks temp files
-~$*
-*.swp
-*.sldprt.bak
-
-# Python cache
+node_modules/
+*.docx
+temp/
+output/figures/
 __pycache__/
 *.pyc
-*.pyo
-
-# IDE
-.vscode/
-.idea/
-
-# Generated outputs (ignored by default)
-/output/figures/*.png
-/output/tables/*.csv
-/output/reports/*.md
-!/output/reports/gear_report.md
-
-# Keep directory structure
-!/output/
-!/output/figures/
-!/output/tables/
-!/output/reports/
-/蝴蝶20260305/
-
-# JSON data files (not tracked)
-*.json
-
-# PNG image files (not tracked)
-*.png
-!/output/fig/齿轮运动简图.png
-
-# NPZ data files (not tracked)
-*.npz
-
-# Stability sweep data (large NPZ files, generated)
-temp/stability/sweep_*/
-temp/stability/figures/sweep_*/
+.unpackaged/

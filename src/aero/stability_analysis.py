@@ -45,9 +45,9 @@ SWEEP_RANGES = {
     "alpha_front_deg":  [30, 40, 50, 55, 60, 70],
     "alpha_back_deg":   [3, 5, 8, 10, 15],
     "phase_diff_deg":   [-30, -25, -20, -15, -10],
-    "mech_a":           [6.0, 7.0, 8.0],
-    "mech_R":           [2.0, 2.25, 2.5],
-    "phi_offset_deg":   [-40, -35, -30, -25],
+    "mech_a":           [7.6],                            # 固定
+    "mech_R":           [3.8],                            # DESIGN_v68=3.8
+    "phi_offset_deg":   [0],                              # 新机构无偏移
     "k_clap":           [0.3, 0.5, 0.8, 1.0, 1.5],
 }
 

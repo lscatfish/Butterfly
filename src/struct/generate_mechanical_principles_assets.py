@@ -28,14 +28,18 @@ def generate_assets(write_report_template: bool = False) -> dict[str, Path]:
     mechanism_schematic = analysis.plot_mechanism_schematic_reference()
 
     figure_paths: dict[str, Path] = {
-        "crank_ref": reference_paths["mechanism"],
-        "crank_fbd": reference_paths["fbd"],
         "rocker_moment": analysis.plot_rocker_moment_vs_crank_angle(results),
         "torque_chain": analysis.plot_torque_chain_vs_crank_angle(results),
         "gear_forces_angle": analysis.plot_gear_mesh_forces_vs_crank_angle(results),
         "output_torque": analysis.plot_output_torque_time(results),
         "system_force_flow": analysis.plot_system_force_flow(results),
     }
+
+    # 参考图（依赖外部手绘/CAD图，可能不存在）
+    if reference_paths.get("mechanism"):
+        figure_paths["crank_ref"] = reference_paths["mechanism"]
+    if reference_paths.get("fbd"):
+        figure_paths["crank_fbd"] = reference_paths["fbd"]
 
     # 可选的受力分析图（依赖已有外部示意图时生成）
     optional_plots = {
