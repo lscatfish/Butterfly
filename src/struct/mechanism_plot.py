@@ -239,7 +239,7 @@ def main():
     parser.add_argument("--a", type=float, default=DEFAULT_PARAMS['a'],
                         help="Parameter a (wing hinge y-coordinate)")
     parser.add_argument("--a-list", type=float, nargs="+",
-                        default=[6.0, 7.0, 7.92, 9.0, 10.0, 11.0],
+                        default=[6.0, 7.0, 7.6, 8.0, 9.0, 10.0],
                         help="a values to scan")
     parser.add_argument("--freq", type=float, default=15.0,
                         help="Flapping frequency in Hz (default: 15)")
