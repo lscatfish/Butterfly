@@ -45,11 +45,19 @@ OUT_ROOT = _PROJ / "temp" / "stability" / "sweep_cartesian"
 BASELINE_CONFIG = {**DESIGN_v69, "dt": 50e-6, "t_end": 5.0, "steady_start": 3.0}
 
 # ============================================================
-# v6.9 扫参网格 — 从 config/design_v69.yaml → sweep 读取
+# v6.9 扫参配置 — 从 config/design_v69.yaml → sweep 读取
 # ============================================================
-SWEEP_GRID = get_sweep_grid()
-if not SWEEP_GRID:
+_sw_raw = get_sweep_grid()
+if not _sw_raw:
     raise SystemExit("Error: config/design_v69.yaml 中没有 'sweep' 段")
+
+# 分离元配置（_ 前缀）和参数网格
+_META_KEYS = {k for k in _sw_raw if k.startswith("_")}
+SWEEP_META = {k: _sw_raw[k] for k in _META_KEYS}
+SWEEP_GRID = {k: v for k, v in _sw_raw.items() if not k.startswith("_")}
+
+OUT_ROOT = _PROJ / SWEEP_META.get("_out_dir", "temp/stability/sweep_cartesian")
+SWEEP_N_JOBS = int(SWEEP_META.get("_n_jobs", -1))
 
 PARAM_SHORT = {
     "alpha_front_deg": "af", "alpha_back_deg": "ab",
@@ -61,18 +69,26 @@ PARAM_SHORT = {
 
 
 # ---- combo_id 编解码 ----
+# 仅扫描参数（列表长度 > 1）参与目录名编码
+_SCAN_KEYS = [k for k, v in SWEEP_GRID.items()
+              if isinstance(v, (list, tuple)) and len(v) > 1]
+
+
 def combo_to_id(combo: dict) -> str:
-    """将参数字典编码为紧凑文件夹名 (可逆)."""
+    """将参数字典编码为紧凑文件夹名（仅扫描参数，科学计数法无精度丢失）。"""
     parts = []
-    for k in sorted(combo.keys()):
+    for k in _SCAN_KEYS:
         v = combo[k]
         short = PARAM_SHORT.get(k, k)
         if isinstance(v, float):
-            s = f"{v:.4f}".rstrip('0').rstrip('.').replace('.', 'p').replace('-', 'n')
+            mantissa, exp = f"{v:.6e}".split("e")
+            mantissa = mantissa.rstrip("0").rstrip(".")
+            s = f"{mantissa}e{exp}"
+            s = s.replace("e+", "ep").replace("e-", "en").replace(".", "p").replace("-", "n")
         elif isinstance(v, int):
-            s = str(v).replace('-', 'n')
+            s = str(v).replace("-", "n")
         else:
-            s = str(v).replace('.', 'p').replace('-', 'n')
+            s = str(v).replace("-", "n")
         parts.append(f"{short}{s}")
     return "_".join(parts)
 
@@ -410,8 +426,8 @@ def _build_sweep_summary(results: list, grid_spec: dict, out_root: Path) -> dict
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="笛卡尔积参数扫描 (方案二)")
-    ap.add_argument("--n-jobs", type=int, default=-1,
-                    help="并行 worker 数, -1=全部核心 (default: -1)")
+    ap.add_argument("--n-jobs", type=int, default=SWEEP_N_JOBS,
+                    help=f"并行 worker 数, -1=全部核心 (default: {SWEEP_N_JOBS})")
     ap.add_argument("--t-end", type=float, default=5.0)
     ap.add_argument("--dt", type=float, default=50e-6)
     ap.add_argument("--grid", type=str, default=None,
