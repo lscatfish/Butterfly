@@ -27,6 +27,7 @@ import numpy as np
 _PROJ = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_PROJ))
 from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, _HAS_NUMBA, DESIGN_v69
+from src.config import get_sweep_grid
 
 try:
     from joblib import Parallel, delayed
@@ -39,25 +40,16 @@ except ImportError:
 OUT_ROOT = _PROJ / "temp" / "stability" / "sweep_cartesian"
 
 # ============================================================
-# v6.9 基线参数 — 与 DESIGN_v69 保持一致
+# v6.9 基线参数 — DESIGN_v69 + 扫参模式数值设定
 # ============================================================
 BASELINE_CONFIG = {**DESIGN_v69, "dt": 50e-6, "t_end": 5.0, "steady_start": 3.0}
 
 # ============================================================
-# v6.9 默认笛卡尔积网格 — 以 DESIGN_v69 为中心的小范围加密
+# v6.9 扫参网格 — 从 config/design_v69.yaml → sweep 读取
 # ============================================================
-DEFAULT_GRID = {
-    "alpha_front_deg":  [50, 55, 60, 70],                 # DESIGN_v69=60
-    "alpha_back_deg":   [3, 5, 8],                         # DESIGN_v69=3
-    "phase_diff_deg":   [-30, -20, -15, -10],              # DESIGN_v69=-15
-    "mech_a":           [7.6],                            # 固定
-    "mech_R":           [3.8],                            # DESIGN_v69=3.8
-    "phi_offset_deg":   [0],                              # 新机构无偏移
-    "f":                [17],                             # DESIGN_v69=17
-    "c_damp":           [5e-4],                           # DESIGN_v69=5e-4
-    "rotation":         ["cw"],                           # DESIGN_v69=cw
-    "k_clap":           [0.3, 0.5],                       # DESIGN_v69=0.3
-}
+SWEEP_GRID = get_sweep_grid()
+if not SWEEP_GRID:
+    raise SystemExit("Error: config/design_v69.yaml 中没有 'sweep' 段")
 
 PARAM_SHORT = {
     "alpha_front_deg": "af", "alpha_back_deg": "ab",
@@ -104,16 +96,28 @@ def id_to_combo(combo_id: str, grid_keys: list) -> dict:
 
 
 # ---- 网格生成 ----
+def _normalize_grid(raw: dict) -> dict:
+    """将标量值包裹为单元素列表，多值列表原样保留。"""
+    out = {}
+    for k, v in raw.items():
+        if isinstance(v, (list, tuple)):
+            out[k] = list(v)
+        else:
+            out[k] = [v]
+    return out
+
+
 def build_cartesian_grid(grid_spec: dict = None) -> list:
     """从网格定义生成组合列表.
 
     Args:
-        grid_spec: {param_name: [values]}, 默认 DEFAULT_GRID.
+        grid_spec: {param_name: [values] 或 标量}, 默认 SWEEP_GRID (YAML > sweep).
 
     Returns:
         [{param: value}, ...] 所有笛卡尔积组合.
     """
-    grid = grid_spec or DEFAULT_GRID
+    raw = grid_spec or SWEEP_GRID
+    grid = _normalize_grid(raw)
     keys = list(grid.keys())
     values_list = list(grid.values())
     combos = [dict(zip(keys, combo)) for combo in product(*values_list)]
@@ -308,7 +312,7 @@ def sweep_cartesian(grid_spec: dict = None,
     out_root = out_root or OUT_ROOT
     out_root.mkdir(parents=True, exist_ok=True)
 
-    grid = grid_spec or DEFAULT_GRID
+    grid = grid_spec or SWEEP_GRID
     combos = build_cartesian_grid(grid)
     n_total = len(combos)
 
@@ -373,7 +377,7 @@ def _build_sweep_summary(results: list, grid_spec: dict, out_root: Path) -> dict
 
     summary_data = {k: [] for k in keys}
     # 每个 combo 的参数值也存一份
-    param_keys = list((grid_spec or DEFAULT_GRID).keys())
+    param_keys = list(grid_spec.keys())
     for pk in param_keys:
         summary_data[f"_param_{pk}"] = []
 
@@ -385,8 +389,11 @@ def _build_sweep_summary(results: list, grid_spec: dict, out_root: Path) -> dict
         for pk in param_keys:
             summary_data[f"_param_{pk}"].append(combo.get(pk, None))
 
-    # 网格元信息
-    summary_data["_grid"] = {k: list(v) for k, v in (grid_spec or DEFAULT_GRID).items()}
+    # 网格元信息: 标量存值, 列表存列表
+    _grid_meta = {}
+    for k, v in grid_spec.items():
+        _grid_meta[k] = v if isinstance(v, (list, tuple)) else [v]
+    summary_data["_grid"] = _grid_meta
     summary_data["_n_combos"] = len(results)
     summary_data["_param_keys"] = list(grid_spec.keys())
 
@@ -414,16 +421,17 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     if args.list_grid:
-        grid = DEFAULT_GRID
+        grid = SWEEP_GRID
         n = 1
         for v in grid.values():
-            n *= len(v)
-        print(f"Default grid ({n} combos):")
+            n *= len(v) if isinstance(v, (list, tuple)) else 1
+        print(f"Sweep grid from config/design_v69.yaml → sweep ({n} combos):")
         for k, v in grid.items():
-            print(f"  {k}: {v}")
+            tag = "scan" if isinstance(v, (list, tuple)) and len(v) > 1 else "fix"
+            print(f"  [{tag}] {k}: {v}")
         sys.exit(0)
 
-    grid_spec = DEFAULT_GRID
+    grid_spec = SWEEP_GRID
     if args.grid:
         with open(args.grid) as f:
             grid_spec = json.load(f)

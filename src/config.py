@@ -118,3 +118,16 @@ def get_version() -> str:
     """返回版本号字符串，如 "6.9"."""
     raw = _load_yaml()
     return raw.get("version", "?.?")
+
+
+def get_sweep_grid() -> dict:
+    """返回扫参网格定义（笛卡尔积参数扫描用）。
+
+    读 YAML > sweep 段。列表值 = 扫参，标量值 = 固定。
+    sweep_cartesian.py 从此读取，不再硬编码 DEFAULT_GRID。
+
+    Returns:
+        {param_name: value|list}: 混合格式，标量或列表。
+    """
+    raw = _load_yaml()
+    return raw.get("sweep", {})
