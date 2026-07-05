@@ -192,6 +192,107 @@ def plot_all(params, geo, valid, f, phi_offset_deg):
     print(f"\nSaved: {out_path}")
 
 
+def plot_rocker_kinematics(params, f, phi_offset_deg):
+    """摇杆（输出杆件）运动学分析：顺时针/逆时针各一张图，角量与线量分轴"""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except Exception as e:
+        print(f"Plotting skipped: {e}", file=sys.stderr)
+        return
+
+    l_m = params['l'] / 1000.0
+    T = 1.0 / f
+    t_ms = lambda t: t * 1000
+
+    plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
+    plt.rcParams['axes.unicode_minus'] = False
+
+    rotations = {
+        'cw':  ('顺时针 (cw)', '#2878B5'),
+        'ccw': ('逆时针 (ccw)', '#C82423'),
+    }
+
+    for rot, (rot_label, rot_color) in rotations.items():
+        t1, phi1, phi_dot1, phi_ddot1, info = wing_kinematics(
+            f=f, a=params['a'], rotation=rot,
+            phi_offset_deg=phi_offset_deg, params=params, n_points=2000)
+
+        t2 = np.concatenate([t1, t1 + T])
+        phi_dot2 = np.concatenate([phi_dot1, phi_dot1])
+        phi_ddot2 = np.concatenate([phi_ddot1, phi_ddot1])
+        v2 = l_m * np.abs(phi_dot2)
+        a2 = l_m * np.sqrt(phi_ddot2**2 + phi_dot2**4)
+
+        t = t_ms(t2)
+        peak_phi_dot = float(np.max(np.abs(phi_dot2)))
+        peak_phi_ddot = float(np.max(np.abs(phi_ddot2)))
+        peak_v = float(np.max(v2))
+        peak_a = float(np.max(a2))
+
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 9))
+
+        c_phi_dot = '#3498DB'   # 角速度: 蓝
+        c_phi_ddot = '#E74C3C'  # 角加速度: 红
+        c_v = '#27AE60'         # 线速度: 绿
+        c_a = '#F39C12'         # 线加速度: 橙
+
+        # ---- 子图1: 角量 (双 y 轴) ----
+        line1, = ax1.plot(t, phi_dot2, color=c_phi_dot, lw=1.8,
+                          label=f'角速度 (峰值 {peak_phi_dot:.1f} rad/s)')
+        ax1.set_ylabel('角速度 (rad/s)', color=c_phi_dot)
+        ax1.tick_params(axis='y', labelcolor=c_phi_dot)
+        ax1.set_xlabel('时间 (ms)')
+
+        ax1b = ax1.twinx()
+        line2, = ax1b.plot(t, phi_ddot2, color=c_phi_ddot, lw=1.8,
+                           label=f'角加速度 (峰值 {peak_phi_ddot:.0f} rad/s^2)')
+        ax1b.set_ylabel('角加速度 (rad/s^2)', color=c_phi_ddot)
+        ax1b.tick_params(axis='y', labelcolor=c_phi_ddot)
+
+        lines1 = [line1, line2]
+        labels1 = [l.get_label() for l in lines1]
+        ax1.set_title(f'摇杆角量 — {rot_label}', fontsize=12)
+        ax1.grid(True, alpha=0.2)
+        ax1.axhline(0, color='gray', ls='--', lw=0.6)
+        ax1.set_zorder(ax1b.get_zorder() + 1)
+        ax1.patch.set_visible(False)
+        ax1.legend(lines1, labels1, loc='lower right', fontsize=9, framealpha=0.9).set_zorder(10)
+
+        # ---- 子图2: 线量 (双 y 轴) ----
+        line3, = ax2.plot(t, v2, color=c_v, lw=1.8,
+                          label=f'线速度 (峰值 {peak_v:.2f} m/s)')
+        ax2.set_ylabel('线速度 (m/s)', color=c_v)
+        ax2.tick_params(axis='y', labelcolor=c_v)
+        ax2.set_xlabel('时间 (ms)')
+
+        ax2b = ax2.twinx()
+        line4, = ax2b.plot(t, a2, color=c_a, lw=1.8,
+                           label=f'线加速度 (峰值 {peak_a:.1f} m/s^2)')
+        ax2b.set_ylabel('线加速度 (m/s^2)', color=c_a)
+        ax2b.tick_params(axis='y', labelcolor=c_a)
+
+        lines2 = [line3, line4]
+        labels2 = [l.get_label() for l in lines2]
+        ax2.set_title(f'端点 P2 线量 (摇杆长 l={params["l"]:.1f} mm) — {rot_label}', fontsize=12)
+        ax2.grid(True, alpha=0.2)
+        ax2.set_zorder(ax2b.get_zorder() + 1)
+        ax2.patch.set_visible(False)
+        ax2.legend(lines2, labels2, loc='lower right', fontsize=9, framealpha=0.9).set_zorder(10)
+
+        fig.suptitle(f'摇杆运动学分析  (f={f} Hz, a={params["a"]} mm) — {rot_label}',
+                     fontsize=14, fontweight='bold')
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        fname = f'摇杆运动学分析-{rot}.svg'
+        out_path = OUTPUT_DIR / fname
+        plt.savefig(out_path, format='svg', bbox_inches="tight")
+        plt.close(fig)
+        print(f"Saved: {out_path}")
+
+
 def main():
     design = get_design()
     f = design["f"]
@@ -226,6 +327,7 @@ def main():
 
     if not args.no_plot:
         plot_all(params, geo, valid, f, phi_offset_deg)
+        plot_rocker_kinematics(params, f, phi_offset_deg)
 
     print("\nDone!")
 
