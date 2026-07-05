@@ -4,12 +4,11 @@
 
 功能：
 1. 机构几何示意图
-2. 顺/逆时针（cw/ccw）一个周期内的角度、角速度、角加速度对比
+2. 顺/逆时针（cw/ccw）两个周期内的角度、角速度、角加速度对比
 
 用法:
-    python src/struct/mechanism_plot.py                    # 默认 f=17 Hz, a=7.6
-    python src/struct/mechanism_plot.py --a 9.0            # 指定 a
-    python src/struct/mechanism_plot.py --freq 15          # 指定频率
+    python src/struct/mechanism_plot.py                 # 生成图
+    python src/struct/mechanism_plot.py --no-plot       # 仅打印数值
 """
 
 import argparse
@@ -119,15 +118,19 @@ def plot_all(params, geo, valid, f, phi_offset_deg):
     ax1 = fig.add_subplot(2, 2, 1)
     plot_mechanism_geometry(ax1, params)
 
-    # ---- 获取 cw / ccw 运动学数据 ----
+    # ---- 获取 cw / ccw 运动学数据（2 个周期） ----
     kin_data = {}
     for rot in ['cw', 'ccw']:
-        t, phi, phi_dot, phi_ddot, info = wing_kinematics(
+        t1, phi1, phi_dot1, phi_ddot1, info = wing_kinematics(
             f=f, a=params['a'], rotation=rot,
             phi_offset_deg=phi_offset_deg, params=params, n_points=2000)
+        T = 1.0 / f
         kin_data[rot] = {
-            't': t, 'phi': phi, 'phi_dot': phi_dot,
-            'phi_ddot': phi_ddot, 'info': info
+            't': np.concatenate([t1, t1 + T]),
+            'phi': np.concatenate([phi1, phi1]),
+            'phi_dot': np.concatenate([phi_dot1, phi_dot1]),
+            'phi_ddot': np.concatenate([phi_ddot1, phi_ddot1]),
+            'info': info
         }
 
     t_ms = lambda t: t * 1000
@@ -143,7 +146,7 @@ def plot_all(params, geo, valid, f, phi_offset_deg):
     ax2.axhline(0, color='gray', ls='--', lw=0.8)
     ax2.set_xlabel('Time (ms)')
     ax2.set_ylabel('Stroke angle φ (°)')
-    ax2.set_title(f'φ(t) @ {f} Hz (cw vs ccw)')
+    ax2.set_title(f'φ(t) — 2 periods @ {f} Hz')
     ax2.legend(fontsize=8)
     ax2.grid(True, alpha=0.3)
 
@@ -191,24 +194,13 @@ def plot_all(params, geo, valid, f, phi_offset_deg):
 
 def main():
     design = get_design()
-    default_freq = design["f"]
+    f = design["f"]
+    params = dict(DEFAULT_PARAMS)
+    phi_offset_deg = params.get('phi_offset_deg', 0.0)
 
     parser = argparse.ArgumentParser(description="Mechanism kinematics visualization")
-    parser.add_argument("--a", type=float, default=DEFAULT_PARAMS['a'],
-                        help="Parameter a (wing hinge y-coordinate)")
-    parser.add_argument("--freq", type=float, default=default_freq,
-                        help=f"Flapping frequency in Hz (default: {default_freq})")
-    parser.add_argument("--phi-offset", type=float, default=None,
-                        help="Fixed angle offset (deg). "
-                             "Default uses mechanism.py DEFAULT_PARAMS['phi_offset_deg'].")
     parser.add_argument("--no-plot", action="store_true")
     args = parser.parse_args()
-
-    params = {**DEFAULT_PARAMS, 'a': args.a}
-
-    effective_offset = args.phi_offset
-    if effective_offset is None:
-        effective_offset = DEFAULT_PARAMS.get('phi_offset_deg', 0.0)
 
     geo, valid = analyze_geometry(params)
     print("=" * 60)
@@ -221,19 +213,19 @@ def main():
           f"{np.rad2deg(geo['phi_max_rad']):.2f}]°")
     print(f"  有效帧: {geo['n_valid']} / {len(valid)}")
 
-    print(f"\n运动学分析 @ {args.freq} Hz:")
+    print(f"\n运动学分析 @ {f} Hz:")
     for rot in ['cw', 'ccw']:
         _, phi, phi_dot, phi_ddot, info = wing_kinematics(
-            f=args.freq, a=args.a, rotation=rot,
-            phi_offset_deg=args.phi_offset, params=params)
+            f=f, a=params['a'], rotation=rot,
+            phi_offset_deg=phi_offset_deg, params=params)
         span = info['phi_span_deg']
         peak_vel = info['phi_dot_max_rad_s']
         peak_acc = info['phi_ddot_max_rad_s2']
-        print(f"  rotation='{rot}', offset={effective_offset:.2f}°: "
+        print(f"  rotation='{rot}', offset={phi_offset_deg:.2f}°: "
               f"span={span:.2f}°, |φ̇|max={peak_vel:.2f}, |φ̈|max={peak_acc:.2f}")
 
     if not args.no_plot:
-        plot_all(params, geo, valid, args.freq, effective_offset)
+        plot_all(params, geo, valid, f, phi_offset_deg)
 
     print("\nDone!")
 
