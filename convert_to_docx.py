@@ -406,6 +406,23 @@ def format_document(docx_path):
                     for run in paragraph.runs:
                         run.font.color.rgb = RGBColor(0, 0, 0)
 
+    # --- 删除 pandoc 自动生成的图片 alt text 段落 ---
+    # pandoc 会把 ![alt](path) 渲染为：
+    #   空段落 + 图片（CaptionedFigure 样式）
+    #   ImageCaption 样式的 alt 文本段落
+    # 如果 alt 文本段落下一段是用户手写的"图X-X ..."，则删除该 alt 文本段落。
+    paragraphs = list(doc.paragraphs)
+    for i, para in enumerate(paragraphs):
+        text = para.text.strip()
+        if re.match(r'^[图表]\d+-\d+', text):
+            if i >= 1:
+                prev_para = paragraphs[i - 1]
+                pPr = prev_para._element.find(qn('w:pPr'))
+                if pPr is not None:
+                    pStyle = pPr.find(qn('w:pStyle'))
+                    if pStyle is not None and pStyle.get(qn('w:val')) == 'ImageCaption':
+                        prev_para._element.getparent().remove(prev_para._element)
+
     # --- 处理图片 ---
     for para in doc.paragraphs:
         for run in para.runs:
