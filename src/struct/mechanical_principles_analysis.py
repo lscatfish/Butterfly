@@ -1506,7 +1506,7 @@ def generate_report_v3(results: dict, figure_paths: dict[str, Path], summary_jso
 
 ## 二、曲柄摇杆机构
 
-实际机构简图如下。图中 `R=2.25` 对应曲柄半径 BP1，`c=14` 对应连杆 P1P2，`a` 为 A 点相对基准线的高度。
+实际机构简图如下。图中 `R` 对应曲柄半径 BP1，`c` 对应连杆 P1P2，`a` 为 A 点相对基准线的高度。
 
 ![实际机构简图](../figures/{figure_paths['mechanism_schematic'].name if figure_paths.get('mechanism_schematic') else figure_paths['crank_ref'].name})
 
