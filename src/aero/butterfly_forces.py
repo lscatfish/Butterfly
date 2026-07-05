@@ -63,6 +63,38 @@ class WingGeometry:
 
 # ---- 共享设计参数: v6.8 最终推荐 (物理合理性约束) ----
 DESIGN_v68 = {
+    "alpha_front_deg": 60.0,
+    "alpha_back_deg": 3.0,
+    "phase_diff_deg": -15.0,
+    "mech_a": 7.6,            # A点y坐标
+    "mech_b": 1.71,           # B点x坐标
+    "mech_R": 3.8,            # 曲柄半径
+    "mech_c": 7.1,            # 连杆长度
+    "mech_l": 5.0,            # 摇杆长度
+    "phi_offset_deg": 0.0,    # 新机构无偏移
+    "rotation": "cw",
+    "f": 17.0,
+    "rho": 1.225,
+    "m_total": 0.020,
+    "I_yy": 3e-5,
+    "d_cg": 0.015,
+    "x_front": 0.025,
+    "x_back": -0.025,
+    "g": 9.81,
+    "k_3d": 0.7,
+    "C_rot": 1.5,
+    "r_rot": 0.5,
+    "k_clap": 0.3,
+    "c_damp": 5e-4,
+    "dt": 10e-6,
+    "t_end": 10.0,
+    "theta0_deg": 0.0,
+    "steady_start": 5.0,
+}
+
+
+# ---- 共享设计参数: v6.8 最终推荐 (物理合理性约束) ----
+DESIGN_v68 = {
     "alpha_front_deg": 45.0,
     "alpha_back_deg": 8.0,
     "phase_diff_deg": -20.0,
@@ -415,7 +447,7 @@ def _rk4_step_numba(tp, td, dt, pf, pdf, pddf, pb, pdb, pddb, kcl_f, kcl_b, *par
 def load_wing_geometry() -> Dict[str, WingGeometry]:
     """从 data/wing_analysis_results.json 加载翅膀几何."""
     geo_path = _PROJ / "data" / "wing_analysis_results.json"
-    with open(geo_path) as f:
+    with open(geo_path, encoding="utf-8") as f:
         data = json.load(f)
     geo = {}
     for g in data["geometry"]:

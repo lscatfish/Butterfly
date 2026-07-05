@@ -11,18 +11,19 @@ import os
 import csv
 
 # ==================== 机构参数 ====================
-l1 = 2.50          # BP1 曲柄长度
-l2 = 14.0          # P2P1 连杆长度
-l3 = 8.0           # AP2 摇杆长度
-bx = 6.97          # B点x坐标
-omega1 = 2.0 * np.pi * 17.0  # 曲柄匀角速度 (rad/s)
-
-out_dir = r"D:\code\Butterfly\output\figures\mechanism"
-
-h_default = 6.0
-h_min, h_max, h_step = 6.0, 6.0, 0.5
+l1 = 3.8          # BP1 曲柄长度
+l2 = 7.1          # P2P1 连杆长度
+l3 = 5.0          # AP2 摇杆长度
+bx = 1.71   # B点x坐标
+h_default = 7.6   # 默认A点高度 (机架AB=sqrt(1.71^2+7.6^2)=7.79)
+h_min, h_max, h_step = 5.0, 10.0, 0.5
 h_values = np.arange(h_min, h_max + h_step/2, h_step)
 
+omega1 = 1.0  #可改成动态角速度
+# 曲柄匀角速度 (rad/s)
+
+out_dir = r"../../output/four_bar_analysis"
+os.makedirs(out_dir, exist_ok=True)
 
 
 # ==================== 核心运动学求解 ====================
@@ -452,38 +453,38 @@ def compute_and_save_K():
 # ==================== 主程序 ====================
 def main():
     set_style()
-    
-    # ---- 每个 h 单独出图 ----
-    for h in h_values:
-        h_str = f'h{h:.1f}'
-        h_dir = os.path.join(out_dir, h_str)
-        os.makedirs(h_dir, exist_ok=True)
-        
-        print(f"正在处理 h={h:.1f} ...")
-        K, theta_deg, lim_min, lim_max = find_limit_positions(h)
-        data = plot_overview(h, lim_min, lim_max, K, theta_deg, save_dir=h_dir)
-        plot_va(data, h, save_dir=h_dir)
-        plot_pa(data, h, save_dir=h_dir)
-    
-    # ---- 总览图：多h轨迹 ----
-    print("正在绘制多h轨迹总览...")
-    plot_multi_h()
-    
-    # ---- 总览图：K vs h ----
-    print("正在计算急回特性...")
-    results = compute_and_save_K()
-    
-    print("\n急回特性系数 K 表格:")
+
+    # A点高度固定，只跑 h_default
+    h = h_default
+    h_str = f'h{h:.1f}'
+    h_dir = os.path.join(out_dir, h_str)
+    os.makedirs(h_dir, exist_ok=True)
+
+    print(f"正在处理 h={h:.1f} ...")
+    K, theta_deg, lim_min, lim_max = find_limit_positions(h)
+    data = plot_overview(h, lim_min, lim_max, K, theta_deg, save_dir=h_dir)
+    plot_va(data, h, save_dir=h_dir)
+    plot_pa(data, h, save_dir=h_dir)
+
+    print(f"\n急回特性 (h={h:.1f}):")
     print("-" * 55)
-    print(f"{'h':>6} {'K':>10} {'theta(deg)':>12} {'t3_min(deg)':>12} {'t3_max(deg)':>12}")
-    print("-" * 55)
-    for r in results:
-        Ks = f"{r['K']:.4f}" if r['K'] is not None else "N/A"
-        ts = f"{r['theta_deg']:.2f}" if r['theta_deg'] is not None else "N/A"
-        print(f"{r['h']:>6.1f} {Ks:>10} {ts:>12} {r['t3_min']:>12.2f} {r['t3_max']:>12.2f}")
+    Ks = f"{K:.4f}" if K is not None else "N/A"
+    ts = f"{theta_deg:.2f}" if theta_deg is not None else "N/A"
+    print(f"  K = {Ks}, theta = {ts} deg")
     print("-" * 55)
     print(f"\n结果已保存到: {out_dir}")
-    print(f"每个 h 值的图片在子文件夹中，如 {out_dir}\\h6.0\\")
+
+    # 同时保存到 CSV (单行)
+    csv_path = os.path.join(os.path.dirname(os.path.dirname(out_dir)), "output", "table", "quick_return_table.csv")
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+    with open(csv_path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['h', 'K', 'theta_deg', 't3_min', 't3_max'])
+        t3_min = lim_min['theta3'] if lim_min else 0
+        t3_max = lim_max['theta3'] if lim_max else 0
+        writer.writerow([h, K if K else '', theta_deg if theta_deg else '',
+                         t3_min, t3_max])
+    print(f"CSV 已保存到: {csv_path}")
 
 
 if __name__ == '__main__':

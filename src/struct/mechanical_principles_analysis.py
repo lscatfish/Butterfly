@@ -44,9 +44,13 @@ def ensure_dirs() -> None:
 
 def baseline_wing_geometry() -> dict:
     """Return the documented baseline wing geometry in SI and report units."""
+    # 新翅膀面积（来自 翅膀的面积.xlsx）:
+    #   前翅单边 S = 30520.02/2 = 15260.01 mm² = 0.015260 m²
+    #   后翅单边 S = 15468.07 mm² = 0.015468 m²
+    # 其他几何参数 (R, c_avg, r1, r2_sq) 暂不变
     items = {
-        "Front": {"S": 0.01617, "R": 0.1543, "c_avg": 0.1048, "r1": 0.4227, "r2_sq": 0.2382},
-        "Back": {"S": 0.01554, "R": 0.1474, "c_avg": 0.1054, "r1": 0.4798, "r2_sq": 0.2876},
+        "Front": {"S": 0.015260, "R": 0.1543, "c_avg": 0.1048, "r1": 0.4227, "r2_sq": 0.2382},
+        "Back": {"S": 0.015468, "R": 0.1474, "c_avg": 0.1054, "r1": 0.4798, "r2_sq": 0.2876},
     }
     for item in items.values():
         item["S_mm2"] = item["S"] * 1e6

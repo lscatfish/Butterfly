@@ -51,9 +51,9 @@ DEFAULT_GRID = {
     "alpha_front_deg":  [40, 45, 50],                    # 物理合理区
     "alpha_back_deg":   [5, 8, 10],                       # DESIGN_v68=8
     "phase_diff_deg":   [-30, -20, -10],                  # DESIGN_v68=-20
-    "mech_a":           [6],                              # DESIGN_v68=6, 绝对最优
-    "mech_R":           [2.50],                           # DESIGN_v68=2.50
-    "phi_offset_deg":   [-30, -25],                       # DESIGN_v68=-30
+    "mech_a":           [7.6],                            # 固定
+    "mech_R":           [3.8],                            # DESIGN_v68=3.8
+    "phi_offset_deg":   [0],                              # 新机构无偏移
     "f":                [17],                             # DESIGN_v68=17
     "c_damp":           [5e-4],                           # DESIGN_v68=5e-4
     "rotation":         ["cw"],                           # DESIGN_v68=cw

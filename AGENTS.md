@@ -1,6 +1,7 @@
 # Butterfly Aerodynamic Analysis — Agent Notes
 
 ## Project Overview
+
 仿生蝴蝶扑翼微型飞行器（MAV）俯仰动力学仿真。质量 20g，四连杆机构驱动，15Hz 扑动频率。验证俯仰稳定性、升力/推力平衡、以及非对称安装角的优化。
 
 ## Current State (2026-06-05)
@@ -12,6 +13,7 @@
 | 版本 | 文件 | 核心特点 | 关键结果 |
 |------|------|---------|---------|
 | v6 | `temp/pitch_dynamics_v6.py` | 刚性 wing, 非对称 α_install 扫描 | L/W=1.48 但俯仰全部发散 |
+| **v6.7** | `src/aero/butterfly_forces.py` | **修正攻角定义**[32]: α=η (相对拍动平面) + tanh平滑过渡 | **L/W=2.15**, peak θ=37.6°, 物理自洽 ✅ |
 | **v6.8** | `src/aero/butterfly_forces.py` | **速度耦合 clap-fling** + 全网格扫参 + DESIGN_v68 | **L/W=2.45**, peak θ=32.9°, 物理合理 ✅ |
 
 ### 最佳参数 (v6.8 DESIGN_v68)
@@ -59,6 +61,7 @@ results = scan_parameters(cfg, {
 ## Physical Model
 
 ### 角度体系
+
 - **α_install**: 翅膀弦线相对机身水平面的固定安装角（出厂设定，飞行中不变）
 - **φ**: 机构拍动角，范围 [-22.2°, +22.2°]
 - **θ_p**: 机身俯仰角（动态变量）
@@ -66,16 +69,19 @@ results = scan_parameters(cfg, {
 - **α_eff**: 有效气动攻角 = ±(α_install + ψ + Δα_damp)
 
 ### 核心 bug（已修复）
+
 - **双重投影** (v4): 不要参考
 - **常量攻角假设** (v5): α_down/α_up 隐含主动扭转，已废弃
 - **俯仰发散** (v6): M_aero 时均不为零 → v6.1 引入气动阻尼修复
 - **高 α_install 使经验公式失效** (v6.1) → v6.2 降低 α_install
 
 ### 四分量力模型
+
 - F_trans: 平动升力/阻力（基于瞬时速度 + 混合 C_L/C_D 模型）
 - F_AM: 附加质量力 ∝ φ̈
 - F_clap: Clap-and-Fling（反转点增强 1.3x）
 - F_rot: 旋转力（当前 α̇=0，自然为 0）
+
 ### C_L/C_D 混合模型
 
 ```
@@ -85,6 +91,7 @@ results = scan_parameters(cfg, {
 ```
 
 ### 力投影（v3 验证）
+
 ```
 Fx = sin(ψ) × (sign×D − L)
 Fz = cos(ψ) × (L − sign×D)
@@ -92,6 +99,7 @@ Fz = cos(ψ) × (L − sign×D)
 ```
 
 ### 气动俯仰阻尼 (v6.1+)
+
 ```
 Δα ≈ atan(θ̇_p × x_wing / U)
 → θ̇_p > 0: 前翅 α↑, 后翅 α↓ → 恢复力矩
@@ -146,11 +154,10 @@ Fz = cos(ψ) × (L − sign×D)
 4. **接口兼容**：`butterfly_forces.py` 已预留 `BodyState.velocity` 和 `body_to_world(position=...)`
 
 实施步骤：
+
 - 在 `butterfly_forces.py` 中添加 `simulate_moving()` 方法或通过 `SimulationConfig.mode='moving'` 切换
 - 扫描 Vx 稳定解（预期 Vx 稳态 ≈ 3-5 m/s）
 - 验证 moving 模型下的 L/W 是否进一步提升
-
-
 
 ## Stability Analysis System
 
@@ -230,7 +237,6 @@ python src/aero/stability_plot.py --all
 - [x] **严格单变量稳定性分析** ✅ — 7参数32值, DESIGN_v68 容差窄
 - [x] 用扫描结果更新默认参数和推荐配置 ✅ — DESIGN_v68
 - [ ] **方案二绘图** — 交互热力图、平行坐标图、Sobol 敏感性指数
-- [ ] **清理旧 bug 公式数据** — `temp/stability/` 下基于 v6.6 之前 bug 公式的数据已废弃, 可清
 
 ---
 
@@ -260,12 +266,14 @@ python src/aero/stability_plot.py --all
 ### 问题
 
 当前实现 (`butterfly_forces.py:452-453`):
+
 ```python
 in_reversal = np.abs(phi_dot) < 0.1 * phi_dot_peak
 k_clap = np.where(in_reversal, config.k_clap, 1.0)
 ```
 
 三个缺陷：
+
 1. **硬二值开关**: k_clap 在阈值处瞬间跳变 30%，曲线出现 kink
 2. **速度判据倒置**: 在 |φ̇|≈0 处增强 30%，但此时气动力∝U²≈0，增强几乎无实际作用
 3. **非物理**: 文献[36-39] 明确 clap-and-fling 增强来自张开速度产生的额外环量
@@ -296,6 +304,7 @@ k_clap = 1.0 + k_clap_extra
   - 余弦平方平滑过渡, 无硬开关
 
 预期效果:
+
 - 增强峰值出现在**端点附近且速度尚存**的位置 (而非端点处)
 - 与位置窗对比: 增强作用于速度>0 的区域, 真正参与动力学
 - 需要重新标定 k_max 使平均增强匹配文献的 ~30%
@@ -406,6 +415,7 @@ DESIGN_v68_aggressive = {
 ⚠️ **α_f ≥ 60° 时均值 α_eff ≥ 60°，翅膀整个拍动周期在深度失速区，L/W 虚高来自平板失速模型的非物理行为，不可采纳。**
 
 ##### 扫描范围
+
 | 阶段 | α_f 范围 | 组数 | 状态 |
 |------|----------|------|------|
 | 细网格 | 50, 55 | 10,326 | ✅ (已迁移移动硬盘) |
@@ -428,6 +438,7 @@ DESIGN_v68_aggressive = {
 **α_b 最优反转** — 低 α_f(30-55) 最优 α_b=3°，高 α_f(60-70) 最优 α_b=15°。物理原因：高 α_f 产生巨大前翅升力，需要高 α_b 维持俯仰力矩平衡。
 
 ##### L/W 峰值演进
+
 ```
 α_f=55, α_b=3:  L/W=3.081  (旧上限 — 细网格)
 α_f=60, α_b=15: L/W=3.607  (+17%)
@@ -435,17 +446,20 @@ DESIGN_v68_aggressive = {
 ```
 
 ##### 机构参数 (不变)
+
 - **a=6** 绝对最优，a=8 的 L/W 峰值不到 a=6 的 1/3
 - **R=2.50 >> 2.25 >> 2.00**: R 每降一档 L/W 降 ~30%
 - **φ_off=-25°** 一致最优
 - **f=17Hz** 一致
 
 ##### k_clap (不变)
+
 - 0.3 和 0.5 几乎并列（L/W 峰值差 <0.01），0.3 稳定率略高 (71% vs 65%)
 - ≥0.8 显著恶化
 - 推荐 0.5（L/W 略高）或 0.3（稳定性略高）
 
 ##### 设计参数对比
+
 | 指标 | **v6.8 (主推)** | v6.8 (保守) | v6.8 (激进) |
 |------|----------------|------------|------------|
 | α_f | **45°** | 40° | 50° |
@@ -459,6 +473,7 @@ DESIGN_v68_aggressive = {
 | mean α_eff | **45.9°** | 40.9° | 50.8° |
 
 ##### 快速分析脚本
+
 ```bash
 python temp/analyze_sweep_v68.py   # 完整六步分析，输出 Top 30 和推荐参数
 python temp/plot_sweep_v68.py      # 7 张综合图表 → output/figures/
@@ -484,6 +499,7 @@ W = 196.2 mN  # 重量 (0.020 × 9.81 × 1000)
 将 `report/` 目录下的多章节 Markdown 报告合并并转换为规范格式的 Word 文档。
 
 **特性**:
+
 - 自动合并章节（摘要 → 绪论 → ... → 结论 → 心得体会）
 - Pandoc 转换 LaTeX 公式 → Word OMML
 - 自动格式处理:
