@@ -2,46 +2,17 @@
 """
 前置机构运动学模块（曲柄摇杆四连杆机构 → 翅膀拍动角）
 
-机构几何（参见 four_bar_analysis.py 参数定义）：
-  ├─ 固定点 A(0, a)：翅膀转轴（摇杆支点），a=7.6
-  ├─ 固定点 B(b, 0)：曲柄圆心（crank 支点）
-  ├─ 曲柄 BP1：长度 R = 3.8，绕 B 顺时针匀速转动
-  ├─ 连杆 P1P2：长度 c = 7.1
-  └─ 摇杆 AP2：长度 l = 5.0，即翅膀杆
-
-  翅膀转角 φ 定义为向量 A→P2 与 +x 轴的夹角，
-  向上为正，向下为负。
-
-坐标系定义：
-  以过 A 的竖直虚线为 y 轴，以过 B（圆心）的水平轴为 x 轴
-  原点 O = (0, 0) 在两轴交点
-  x 轴水平向右，y 轴垂直向上。
-  因此：A = (0, a)，B = (b, 0)
-
-参数对应（与 four_bar_analysis.py 一致）：
-  a  = 7.6    → 翅膀转轴 A 的 y 坐标
-  b  = 1.71   → 圆心 B 的 x 坐标
-  R  = 3.8    → 曲柄半径
-  c  = 7.1    → 连杆长度
-  l  = 5.0    → 摇杆/翅膀杆长度
-  机架 AB = sqrt(1.71^2 + 7.6^2) = 7.79 mm
+机构参数的权威来源是 config/design_v69.yaml（通过 src.config 读取）。
 """
 
 import numpy as np
 from pathlib import Path
 
+from src.config import get_mech_params
+
 PROJECT_ROOT = Path(__file__).parent.parent
 
-# ==================== 机构几何参数 ====================
-# 所有长度单位与 four_bar_analysis.py 一致（mm）
-DEFAULT_PARAMS = {
-    "a": 7.6,            # 翅膀转轴 A 的 y 坐标
-    "b": 1.71,           # 圆心 B 的 x 坐标
-    "R": 3.8,            # 曲柄半径
-    "c": 7.1,            # 连杆 P1-P2 长度
-    "l": 5.0,            # 摇杆/翅膀杆 A-P2 长度
-    "phi_offset_deg": 0.0,  # 翅膀安装基准偏移 °（新机构无偏移）
-}
+DEFAULT_PARAMS = get_mech_params()
 
 
 def solve_phi(theta: float, params: dict) -> float:

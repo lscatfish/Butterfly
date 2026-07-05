@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from src.aero.butterfly_forces import (
-    DESIGN_v68,
+    DESIGN_v69,
     SimulationConfig,
     WingGeometry,
     compute_cop_vec,
@@ -163,17 +163,17 @@ def four_wing_series(front: dict, back: dict) -> dict:
 
 def compute_results() -> dict:
     cfg = SimulationConfig(
-        alpha_front_deg=DESIGN_v68["alpha_front_deg"],
-        alpha_back_deg=DESIGN_v68["alpha_back_deg"],
-        phase_diff_deg=DESIGN_v68["phase_diff_deg"],
-        mech_a=DESIGN_v68["mech_a"],
-        mech_R=DESIGN_v68["mech_R"],
-        phi_offset_deg=DESIGN_v68["phi_offset_deg"],
-        f=DESIGN_v68["f"],
-        rotation=DESIGN_v68["rotation"],
-        c_damp=DESIGN_v68["c_damp"],
-        t_end=1.0 / DESIGN_v68["f"],
-        dt=(1.0 / DESIGN_v68["f"]) / 720.0,
+        alpha_front_deg=DESIGN_v69["alpha_front_deg"],
+        alpha_back_deg=DESIGN_v69["alpha_back_deg"],
+        phase_diff_deg=DESIGN_v69["phase_diff_deg"],
+        mech_a=DESIGN_v69["mech_a"],
+        mech_R=DESIGN_v69["mech_R"],
+        phi_offset_deg=DESIGN_v69["phi_offset_deg"],
+        f=DESIGN_v69["f"],
+        rotation=DESIGN_v69["rotation"],
+        c_damp=DESIGN_v69["c_damp"],
+        t_end=1.0 / DESIGN_v69["f"],
+        dt=(1.0 / DESIGN_v69["f"]) / 720.0,
         steady_start=0.0,
     )
     params = {"f": cfg.f, "m_total": cfg.m_total, "rho": cfg.rho}
@@ -1347,7 +1347,7 @@ i13  = i12 · i2'3 = (+)1600/49 = 32.653
 
 ## 5. 运动学分析
 
-本次按项目当前推荐的 v6.6 设计参数计算：`a=6 mm, R=2.25 mm, phi_offset=-30 deg, f=17 Hz, rotation=cw`。
+本次按项目当前推荐的 v6.9 设计参数计算：`a=7.6 mm, R=3.8 mm, phi_offset=0 deg, f=17 Hz, rotation=cw`。
 
 `mechanism.py` 的求解过程是：给定曲柄角 `theta` 后，先求 P1 点位置，再由三角形 A-P1-P2 的几何约束求 P2 点，最后得到摇杆角 `phi`。该机构的输出不是正弦假设，而是由实际四杆几何关系决定。
 
@@ -1459,7 +1459,7 @@ Fn = Ft / cos(alpha)
 3. 轮系为两级定轴外啮合齿轮传动，2 和 2' 为双联齿轮，总传动比约为 `{gs['i_total']:.3f}`，输出与输入同向。
 4. 曲柄匀速转动时，摇杆输出角速度和角加速度并不均匀，因此受力分析必须考虑惯性力矩。
 5. 翅膀侧复杂气动力在机械原理层面等效为作用于摇杆的外载力矩 `M_wing`，再由摇杆、连杆、曲柄逐级传回齿轮和电机。
-6. 按当前 v6.6 推荐设计参数估算，峰值输出扭矩约 `{pt['t_out_peak_Nm']*1000:.2f} N.mm`，峰值电机扭矩约 `{pt['t_motor_peak_Nm']*1000:.3f} N.mm`。
+6. 按当前 v6.9 推荐设计参数估算，峰值输出扭矩约 `{pt['t_out_peak_Nm']*1000:.2f} N.mm`，峰值电机扭矩约 `{pt['t_motor_peak_Nm']*1000:.3f} N.mm`。
 7. 峰值工况下第二级齿轮圆周力约 `{gf['mesh_2p3_peak']['Ft_N']:.2f} N`，是后续轴、轴承和机架受力分析的关键载荷。
 
 ---
@@ -1531,7 +1531,7 @@ $$F = 3n - 2P_L - P_H = 3 \\times 3 - 2 \\times 4 - 0 = 1$$
 
 因此，该扑翼执行机构为单自由度机构。电机只需提供一个连续转动输入，摇杆摆角由四杆几何关系唯一确定。
 
-运动学计算采用当前推荐设计参数：`a=6 mm, R=2.25 mm, phi_offset=-30°，f=17 Hz`。计算结果如下：
+运动学计算采用当前推荐设计参数：`a=7.6 mm, R=3.8 mm, phi_offset=0°，f=17 Hz`。计算结果如下：
 
 | 项目 | 数值 |
 |:---|---:|

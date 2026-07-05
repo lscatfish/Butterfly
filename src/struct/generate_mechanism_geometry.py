@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-生成曲柄摇杆机构几何尺寸图（单图，按 DESIGN_v68 参数）。
+生成曲柄摇杆机构几何尺寸图（单图，按 config/design_v69.yaml 参数）。
 """
 
 import sys

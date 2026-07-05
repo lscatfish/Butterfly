@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-v6.8 扫参可视化 + 设计点曲线 — 融合版.
+v6.8 扫参可视化 + 设计点曲线 — 融合版 (历史数据分析, v6.9 已废弃).
 
-从 sweep_cartesian 输出 (summary.json + timeseries.npz) 生成:
+从旧 sweep_cartesian (v6.8 机构参数) 输出生成图表。
+⚠️ 新机构 v6.9 需重新扫参后再用此模块分析。
+
   fig1-fig7:  扫参主图表 (plot_sweep_v68.py 原版)
   fig8-fig10: 物理合理性补充 (plot_sweep_v68_supp.py 原版)
-  fig11:      DESIGN_v68 设计点曲线 (plot_design_v68.py 原版)
+  fig11:      旧 DESIGN_v68 设计点曲线 (plot_design_v68.py 原版)
 
 用法:
   python -m src.aero.plot_v68 --all

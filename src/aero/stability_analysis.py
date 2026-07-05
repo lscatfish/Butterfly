@@ -25,28 +25,28 @@ import numpy as np
 
 _PROJ = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_PROJ))
-from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, DESIGN_v68
+from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, DESIGN_v69
 
 OUT_ROOT = _PROJ / "temp" / "stability"
 BASELINE_DIR = OUT_ROOT / "baseline"
 
 
 # ============================================================
-# 基线参数 — 与 SimulationConfig / DESIGN_v68 保持一致
+# 基线参数 — 与 SimulationConfig / DESIGN_v69 保持一致
 # ============================================================
-BASELINE_CONFIG = {**DESIGN_v68, "dt": 50e-6, "t_end": 5.0, "steady_start": 3.0}
+BASELINE_CONFIG = {**DESIGN_v69, "dt": 50e-6, "t_end": 5.0, "steady_start": 3.0}
 
 # ============================================================
-# 扫描方案: 与 F:\...\sweep_cartesian 11,622 组全量网格保持一致
+# 扫描方案: 与 F:\...\sweep_cartesian 全量网格保持一致
 # 这样方案一单变量扫描可直接视为全量数据的切片, 无需重跑.
-# 注意: DESIGN_v68 α_f=45° 不在该网格中, 是单独标定的设计点.
+# 注意: DESIGN_v69 α_f=60° 是扫参确定的设计点.
 # ============================================================
 SWEEP_RANGES = {
     "alpha_front_deg":  [30, 40, 50, 55, 60, 70],
     "alpha_back_deg":   [3, 5, 8, 10, 15],
     "phase_diff_deg":   [-30, -25, -20, -15, -10],
     "mech_a":           [7.6],                            # 固定
-    "mech_R":           [3.8],                            # DESIGN_v68=3.8
+    "mech_R":           [3.8],                            # DESIGN_v69=3.8
     "phi_offset_deg":   [0],                              # 新机构无偏移
     "k_clap":           [0.3, 0.5, 0.8, 1.0, 1.5],
 }

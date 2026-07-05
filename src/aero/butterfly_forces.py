@@ -44,6 +44,7 @@ except ImportError:
 _PROJ = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_PROJ))
 from src.struct.mechanism import wing_kinematics, DEFAULT_PARAMS, solve_phi
+from src.config import get_design, get_version
 
 # ============================================================
 # Dataclasses
@@ -61,68 +62,11 @@ class WingGeometry:
     AR: float         # 展弦比
 
 
-# ---- 共享设计参数: v6.8 最终推荐 (物理合理性约束) ----
-DESIGN_v68 = {
-    "alpha_front_deg": 60.0,
-    "alpha_back_deg": 3.0,
-    "phase_diff_deg": -15.0,
-    "mech_a": 7.6,            # A点y坐标
-    "mech_b": 1.71,           # B点x坐标
-    "mech_R": 3.8,            # 曲柄半径
-    "mech_c": 7.1,            # 连杆长度
-    "mech_l": 5.0,            # 摇杆长度
-    "phi_offset_deg": 0.0,    # 新机构无偏移
-    "rotation": "cw",
-    "f": 17.0,
-    "rho": 1.225,
-    "m_total": 0.020,
-    "I_yy": 3e-5,
-    "d_cg": 0.015,
-    "x_front": 0.025,
-    "x_back": -0.025,
-    "g": 9.81,
-    "k_3d": 0.7,
-    "C_rot": 1.5,
-    "r_rot": 0.5,
-    "k_clap": 0.3,
-    "c_damp": 5e-4,
-    "dt": 10e-6,
-    "t_end": 10.0,
-    "theta0_deg": 0.0,
-    "steady_start": 5.0,
-}
+# ---- 共享设计参数: 从 config/design_v69.yaml 加载（单一来源） ----
+DESIGN_v69 = get_design()
 
-
-# ---- 共享设计参数: v6.8 最终推荐 (物理合理性约束) ----
-DESIGN_v68 = {
-    "alpha_front_deg": 45.0,
-    "alpha_back_deg": 8.0,
-    "phase_diff_deg": -20.0,
-    "mech_a": 6.0,
-    "mech_b": 6.97,
-    "mech_R": 2.50,
-    "mech_c": 14.00,
-    "mech_l": 8.00,
-    "phi_offset_deg": -30.0,
-    "rotation": "cw",
-    "f": 17.0,
-    "rho": 1.225,
-    "m_total": 0.020,
-    "I_yy": 3e-5,
-    "d_cg": 0.015,
-    "x_front": 0.025,
-    "x_back": -0.025,
-    "g": 9.81,
-    "k_3d": 0.7,
-    "C_rot": 1.5,
-    "r_rot": 0.5,
-    "k_clap": 0.3,
-    "c_damp": 5e-4,
-    "dt": 10e-6,
-    "t_end": 10.0,
-    "theta0_deg": 0.0,
-    "steady_start": 5.0,
-}
+# 向后兼容
+DESIGN_v68 = DESIGN_v69
 
 
 @dataclass
@@ -130,41 +74,41 @@ class SimulationConfig:
     """仿真全参数配置 — 所有参数可被scan覆盖."""
 
     # ---- 翅膀安装 ----
-    alpha_front_deg: float = DESIGN_v68["alpha_front_deg"]
-    alpha_back_deg: float = DESIGN_v68["alpha_back_deg"]
-    phase_diff_deg: float = DESIGN_v68["phase_diff_deg"]
+    alpha_front_deg: float = DESIGN_v69["alpha_front_deg"]
+    alpha_back_deg: float = DESIGN_v69["alpha_back_deg"]
+    phase_diff_deg: float = DESIGN_v69["phase_diff_deg"]
 
     # ---- 四连杆机构 ----
-    mech_a: float = DESIGN_v68["mech_a"]
-    mech_b: float = DESIGN_v68["mech_b"]
-    mech_R: float = DESIGN_v68["mech_R"]
-    mech_c: float = DESIGN_v68["mech_c"]
-    mech_l: float = DESIGN_v68["mech_l"]
-    phi_offset_deg: float = DESIGN_v68["phi_offset_deg"]
-    rotation: str = DESIGN_v68["rotation"]
+    mech_a: float = DESIGN_v69["mech_a"]
+    mech_b: float = DESIGN_v69["mech_b"]
+    mech_R: float = DESIGN_v69["mech_R"]
+    mech_c: float = DESIGN_v69["mech_c"]
+    mech_l: float = DESIGN_v69["mech_l"]
+    phi_offset_deg: float = DESIGN_v69["phi_offset_deg"]
+    rotation: str = DESIGN_v69["rotation"]
 
     # ---- 物理 ----
-    f: float = DESIGN_v68["f"]
-    rho: float = DESIGN_v68["rho"]
-    m_total: float = DESIGN_v68["m_total"]
-    I_yy: float = DESIGN_v68["I_yy"]
-    d_cg: float = DESIGN_v68["d_cg"]
-    x_front: float = DESIGN_v68["x_front"]
-    x_back: float = DESIGN_v68["x_back"]
-    g: float = DESIGN_v68["g"]
+    f: float = DESIGN_v69["f"]
+    rho: float = DESIGN_v69["rho"]
+    m_total: float = DESIGN_v69["m_total"]
+    I_yy: float = DESIGN_v69["I_yy"]
+    d_cg: float = DESIGN_v69["d_cg"]
+    x_front: float = DESIGN_v69["x_front"]
+    x_back: float = DESIGN_v69["x_back"]
+    g: float = DESIGN_v69["g"]
 
     # ---- 数值 ----
-    dt: float = DESIGN_v68["dt"]
-    t_end: float = DESIGN_v68["t_end"]
-    theta0_deg: float = DESIGN_v68["theta0_deg"]
-    steady_start: float = DESIGN_v68["steady_start"]
+    dt: float = DESIGN_v69["dt"]
+    t_end: float = DESIGN_v69["t_end"]
+    theta0_deg: float = DESIGN_v69["theta0_deg"]
+    steady_start: float = DESIGN_v69["steady_start"]
 
     # ---- 气动系数 ----
-    k_3d: float = DESIGN_v68["k_3d"]
-    C_rot: float = DESIGN_v68["C_rot"]
-    r_rot: float = DESIGN_v68["r_rot"]
-    k_clap: float = DESIGN_v68["k_clap"]
-    c_damp: float = DESIGN_v68["c_damp"]
+    k_3d: float = DESIGN_v69["k_3d"]
+    C_rot: float = DESIGN_v69["C_rot"]
+    r_rot: float = DESIGN_v69["r_rot"]
+    k_clap: float = DESIGN_v69["k_clap"]
+    c_damp: float = DESIGN_v69["c_damp"]
 
     def to_mech_params(self) -> dict:
         return {
@@ -1048,17 +992,18 @@ def scan_parameters(base_config: SimulationConfig,
 if __name__ == "__main__":
     print("=" * 70)
     print("butterfly_forces.py — 验证测试")
+    print(f"  版本: v{get_version()}  |  配置文件: config/design_v69.yaml")
     print("=" * 70)
 
-    # Test 1: 基线参数快速验证 (v6.8 DESIGN_v68 默认参数, 3s, 50us)
-    print("\n--- Test 1: 默认参数 (DESIGN_v68, t=3s) ---")
+    # Test 1: 基线参数快速验证 (v6.9 DESIGN_v69 默认参数, 3s, 50us)
+    print("\n--- Test 1: 默认参数 (DESIGN_v69, t=3s) ---")
     cfg1 = SimulationConfig(t_end=3.0, dt=50e-6)
     print(f"  默认参数: α_f={cfg1.alpha_front_deg}, α_b={cfg1.alpha_back_deg}, "
-          f"R={cfg1.mech_R}, k_clap={cfg1.k_clap}, f={cfg1.f}")
+          f"R={cfg1.mech_R}, phase={cfg1.phase_diff_deg}, k_clap={cfg1.k_clap}, f={cfg1.f}")
     m1 = ButterflyForceModel(cfg1)
     out1 = m1.simulate(progress=True)
     s1 = out1.summary
-    print(f"  L/W={s1['L/W']:.3f} (expected ~2.45) | peak={s1['peak_theta_deg']:.1f}° | n90={s1['n_exceed_90']}")
+    print(f"  L/W={s1['L/W']:.3f} (expected ~4.5) | peak={s1['peak_theta_deg']:.1f}° | n90={s1['n_exceed_90']}")
     print(f"  α_eff FL: [{np.min(out1.wings['FL'].alpha_eff_deg):.0f}°, {np.max(out1.wings['FL'].alpha_eff_deg):.0f}°]")
     print(f"  Fz_body={s1['avg_Fz_body_mN']:+.0f}mN | Fz_world={s1['avg_Fz_world_mN']:+.0f}mN | weight={s1['weight_mN']:.0f}mN")
     print(f"  Wings: {list(out1.wings.keys())}")
@@ -1068,27 +1013,18 @@ if __name__ == "__main__":
               f"rocker_pv_max={np.max(np.abs(wo.rocker_principal_vec)):.4f}N  "
               f"rocker_pm_max={np.max(np.abs(wo.rocker_principal_moment)):.6f}N·m")
 
-    # Test 2: 相位差影响
+    # Test 2: 相位差影响 (使用默认 v6.9 机构参数, 仅改变相位)
     print("\n--- Test 2: 相位差 -10° ---")
-    cfg2 = SimulationConfig(
-        alpha_front_deg=45, alpha_back_deg=8,
-        phase_diff_deg=-10,
-        mech_a=6, mech_R=2.50, phi_offset_deg=-30,
-        f=17, c_damp=5e-4, rotation='cw',
-        t_end=1.0, dt=50e-6,
-    )
+    cfg2 = SimulationConfig(phase_diff_deg=-10, t_end=1.0, dt=50e-6)
     m2 = ButterflyForceModel(cfg2)
     out2 = m2.simulate(progress=True)
     print(f"  L/W={out2.summary['L/W']:.3f} | peak={out2.summary['peak_theta_deg']:.1f}°")
 
-    # Test 3: α_f 小范围扫描
+    # Test 3: α_f 小范围扫描 (使用默认 v6.9 机构参数)
     print("\n--- Test 3: α_f/α_b 扫描 ---")
     results = scan_parameters(
-        SimulationConfig(
-            phase_diff_deg=-20, mech_a=6, mech_R=2.50,
-            phi_offset_deg=-30, f=17, c_damp=5e-4, rotation='cw',
-        ),
-        {"alpha_front_deg": [40, 45, 50], "alpha_back_deg": [5, 8, 10]},
+        SimulationConfig(),
+        {"alpha_front_deg": [50, 55, 60, 70], "alpha_back_deg": [3, 5, 8]},
         t_end=3.0, dt=50e-6, progress=True,
     )
     print(f"\n  Top results:")

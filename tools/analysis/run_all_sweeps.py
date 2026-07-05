@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """批量运行所有参数的真正单变量偏离扫描.
 
-每次只改一个参数, 其他参数锁死在 DESIGN_v68 (BASELINE_CONFIG).
+每次只改一个参数, 其他参数锁死在 DESIGN_v69 (BASELINE_CONFIG).
 运行前先清掉旧的聚合摘要目录, 避免混淆.
 """
 import sys, time, shutil

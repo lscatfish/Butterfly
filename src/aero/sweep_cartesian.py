@@ -26,7 +26,7 @@ import numpy as np
 
 _PROJ = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_PROJ))
-from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, _HAS_NUMBA, DESIGN_v68
+from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, _HAS_NUMBA, DESIGN_v69
 
 try:
     from joblib import Parallel, delayed
@@ -39,25 +39,24 @@ except ImportError:
 OUT_ROOT = _PROJ / "temp" / "stability" / "sweep_cartesian"
 
 # ============================================================
-# v6.8 基线参数 — 与 DESIGN_v68 保持一致
+# v6.9 基线参数 — 与 DESIGN_v69 保持一致
 # ============================================================
-BASELINE_CONFIG = {**DESIGN_v68, "dt": 50e-6, "t_end": 5.0, "steady_start": 3.0}
+BASELINE_CONFIG = {**DESIGN_v69, "dt": 50e-6, "t_end": 5.0, "steady_start": 3.0}
 
 # ============================================================
-# v6.8 默认笛卡尔积网格 — 以 DESIGN_v68 为中心的小范围加密
-# 3×3×3×1×1×2×1×1×1×2 = 108 组, 用于快速验证默认参数附近敏感度
+# v6.9 默认笛卡尔积网格 — 以 DESIGN_v69 为中心的小范围加密
 # ============================================================
 DEFAULT_GRID = {
-    "alpha_front_deg":  [40, 45, 50],                    # 物理合理区
-    "alpha_back_deg":   [5, 8, 10],                       # DESIGN_v68=8
-    "phase_diff_deg":   [-30, -20, -10],                  # DESIGN_v68=-20
+    "alpha_front_deg":  [50, 55, 60, 70],                 # DESIGN_v69=60
+    "alpha_back_deg":   [3, 5, 8],                         # DESIGN_v69=3
+    "phase_diff_deg":   [-30, -20, -15, -10],              # DESIGN_v69=-15
     "mech_a":           [7.6],                            # 固定
-    "mech_R":           [3.8],                            # DESIGN_v68=3.8
+    "mech_R":           [3.8],                            # DESIGN_v69=3.8
     "phi_offset_deg":   [0],                              # 新机构无偏移
-    "f":                [17],                             # DESIGN_v68=17
-    "c_damp":           [5e-4],                           # DESIGN_v68=5e-4
-    "rotation":         ["cw"],                           # DESIGN_v68=cw
-    "k_clap":           [0.3, 0.5],                       # DESIGN_v68=0.3
+    "f":                [17],                             # DESIGN_v69=17
+    "c_damp":           [5e-4],                           # DESIGN_v69=5e-4
+    "rotation":         ["cw"],                           # DESIGN_v69=cw
+    "k_clap":           [0.3, 0.5],                       # DESIGN_v69=0.3
 }
 
 PARAM_SHORT = {
