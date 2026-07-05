@@ -512,6 +512,40 @@ python tools/fix_docx_math_fonts.py output/仿生蝴蝶扑翼MAV机械原理分�
 
 **输出**: `output/仿生蝴蝶扑翼MAV机械原理分析报告.docx`
 
+## 稳定性分析工具
+
+### 单变量偏离扫描工具
+
+| 工具 | 说明 |
+|------|------|
+| `tools/analysis/run_all_sweeps.py` | 批量运行所有单变量偏离扫描（其他参数锁死 DESIGN_v68），包含：α_f、α_b、phase_diff、mech_a、mech_R、φ_offset、k_clap |
+| `src/aero/stability_analysis.py` | 单变量偏离扫描主程序（基线 + 指定参数扫描） |
+| `src/aero/stability_plot.py` | 稳定性结果绘图（基线图 + 偏离图） |
+
+### 笛卡尔积扫参分析工具
+
+| 工具 | 说明 |
+|------|------|
+| `src/aero/sweep_cartesian.py` | 全参数笛卡尔积扫描（joblib并行），11,809组 |
+| `tools/analysis/rebuild_sweep_summary.py` | 重建扫参摘要 JSON，从目录结构解析参数组合 |
+| `tools/analysis/extract_sweep_slices.py` | 从扫参数据中提取特定参数切片，生成对比数据 |
+| `tools/analysis/analyze_sweep_v68.py` | **完整六步分析**：k_clap敏感性、α_f×α_b交互、phase影响、Top 30排名、推荐设计参数 |
+
+### 使用示例
+
+```bash
+# 单变量偏离扫描（7参数，约7分钟）
+python tools/analysis/run_all_sweeps.py
+
+# 生成稳定性图表
+python src/aero/stability_plot.py --baseline
+python src/aero/stability_plot.py --sweep alpha_front_deg
+python src/aero/stability_plot.py --all
+
+# 全扫参分析（输出 Top 30 和推荐参数）
+python tools/analysis/analyze_sweep_v68.py
+```
+
 ## Run Commands
 
 ```bash
