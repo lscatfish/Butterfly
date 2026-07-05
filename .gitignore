@@ -40,3 +40,4 @@ temp/stability/sweep_*/
 temp/stability/figures/sweep_*/
 .codegraph/
 .playwright-mcp/
+.opencode/
