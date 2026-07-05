@@ -38,3 +38,5 @@ __pycache__/
 # Stability sweep data (large NPZ files, generated)
 temp/stability/sweep_*/
 temp/stability/figures/sweep_*/
+.codegraph/
+.playwright-mcp/
