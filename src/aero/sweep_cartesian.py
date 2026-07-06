@@ -331,7 +331,8 @@ def sweep_cartesian(grid_spec: dict = None,
     n_total = len(combos)
 
     # 单行摘要
-    grid_info = ", ".join(f"{k}={len(v)}" for k, v in grid.items())
+    grid_info = ", ".join(f"{k}={len(v) if isinstance(v, (list, tuple)) else 1}"
+                         for k, v in grid.items())
     nb_tag = "numba" if _HAS_NUMBA else "python"
     print(f"[Cartesian] {grid_info} → {n_total} combos | {nb_tag} × {n_jobs} workers")
     print(f"[Cartesian] Output: {out_root}")
