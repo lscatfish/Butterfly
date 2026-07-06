@@ -78,7 +78,7 @@ numerical:
 # sweep_cartesian.py 从此读取。列表 = 扫参，标量 = 固定。
 # _ 前缀的 key 为扫参引擎配置，不参与笛卡尔积。
 sweep:
-  _n_jobs: -1                             # 并行 worker 数，-1 = 全部核心
+  _n_jobs: 30                             # 并行 worker 数，-1 = 全部核心
   _out_dir: "F:\\重大作业考试\\26秋\\机械原理\\sweep_all"  # 输出根目录（相对项目根）
 
   # ---- 气动设计参数 ----
