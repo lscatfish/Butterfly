@@ -379,7 +379,14 @@ def sweep_cartesian(grid_spec: dict = None,
 
 
 def _build_sweep_summary(results: list, grid_spec: dict, out_root: Path) -> dict:
-    """汇总所有 combo 的标量指标到 sweep_summary.json."""
+    """汇总所有 combo 的标量指标到 sweep_summary.json.
+
+    行为:
+      - 如果 sweep_summary.json 已存在, 先读取并按 combo_id 合并.
+      - 本次新结果会覆盖同 combo_id 的旧条目.
+      - 未被覆盖的旧条目保留.
+      - 如果文件不存在, 创建新文件.
+    """
     keys = ["_combo_id", "L/W", "L/W_body", "peak_theta_deg", "n_exceed_90",
             "mean_Fy_body_mN", "mean_Fy_world_mN", "mean_Fx_body_mN",
             "mean_M_aero_uNm", "peak_M_aero_uNm",
@@ -389,32 +396,85 @@ def _build_sweep_summary(results: list, grid_spec: dict, out_root: Path) -> dict
             "peak_alpha_eff_FL_deg", "peak_alpha_eff_BL_deg",
             "mean_CL_FL", "mean_CD_FL"]
 
-    summary_data = {k: [] for k in keys}
-    # 每个 combo 的参数值也存一份
+    summary_path = out_root / "sweep_summary.json"
+
+    # ---- 读取已有数据（如果存在） ----
+    existing_rows = {}
+    if summary_path.exists():
+        try:
+            with open(summary_path, encoding="utf-8") as f:
+                old = json.load(f)
+            n_old = old.get("_n_combos", 0)
+            if n_old > 0:
+                for i in range(n_old):
+                    cid = old["_combo_id"][i]
+                    row = {k: old.get(k, [None] * n_old)[i] for k in keys}
+                    row["_combo"] = {}
+                    for pk in old.get("_param_keys", []):
+                        row["_combo"][pk] = old.get(f"_param_{pk}", [None] * n_old)[i]
+                    existing_rows[cid] = row
+        except Exception as e:
+            print(f"  Warning: 读取已有 sweep_summary.json 失败, 将覆盖: {e}")
+            existing_rows = {}
+
+    # ---- 本次新结果 ----
+    new_rows = {}
     param_keys = list(grid_spec.keys())
+    for sm in results:
+        cid = sm.get("_combo_id")
+        if cid is None:
+            continue
+        row = {k: sm.get(k, None) for k in keys}
+        row["_combo"] = sm.get("_combo", {})
+        new_rows[cid] = row
+
+    # ---- 合并：新结果覆盖旧结果 ----
+    merged_rows = {**existing_rows, **new_rows}
+
+    # ---- 重建 summary_data ----
+    summary_data = {k: [] for k in keys}
     for pk in param_keys:
         summary_data[f"_param_{pk}"] = []
 
-    for sm in results:
+    for cid in sorted(merged_rows.keys()):
+        row = merged_rows[cid]
+        summary_data["_combo_id"].append(cid)
         for k in keys:
-            summary_data[k].append(sm.get(k, None))
-        # 存储参数值
-        combo = sm.get("_combo", {})
+            if k != "_combo_id":
+                summary_data[k].append(row.get(k, None))
         for pk in param_keys:
-            summary_data[f"_param_{pk}"].append(combo.get(pk, None))
+            summary_data[f"_param_{pk}"].append(row["_combo"].get(pk, None))
 
-    # 网格元信息: 标量存值, 列表存列表
+    # 网格元信息：取已有和本次 grid 的并集，保留最全的列表
     _grid_meta = {}
-    for k, v in grid_spec.items():
-        _grid_meta[k] = v if isinstance(v, (list, tuple)) else [v]
-    summary_data["_grid"] = _grid_meta
-    summary_data["_n_combos"] = len(results)
-    summary_data["_param_keys"] = list(grid_spec.keys())
+    for k in param_keys:
+        old_vals = set()
+        if summary_path.exists() and isinstance(existing_rows, dict):
+            for r in existing_rows.values():
+                if k in r["_combo"]:
+                    old_vals.add(r["_combo"][k])
+        new_vals = set()
+        for r in new_rows.values():
+            if k in r["_combo"]:
+                new_vals.add(r["_combo"][k])
+        all_vals = old_vals | new_vals
+        v_spec = grid_spec.get(k)
+        if isinstance(v_spec, (list, tuple)):
+            base = list(v_spec)
+        else:
+            base = [v_spec]
+        # 合并并排序，尽量保持数值顺序
+        merged_vals = sorted(all_vals, key=lambda x: (isinstance(x, str), x if isinstance(x, str) else float(x)))
+        _grid_meta[k] = merged_vals if len(merged_vals) > 1 else (merged_vals[0] if merged_vals else v_spec)
 
-    with open(out_root / "sweep_summary.json", "w") as f:
+    summary_data["_grid"] = _grid_meta
+    summary_data["_n_combos"] = len(merged_rows)
+    summary_data["_param_keys"] = param_keys
+
+    with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary_data, f, indent=2, ensure_ascii=False)
 
-    print(f"  Summary saved to {out_root / 'sweep_summary.json'}")
+    print(f"  Summary saved to {summary_path} (merged {len(existing_rows)} old + {len(new_rows)} new = {len(merged_rows)} combos)")
     return summary_data
 
 

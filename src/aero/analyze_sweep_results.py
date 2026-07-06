@@ -105,6 +105,32 @@ def _read_combo_config(combo_dir: Path) -> dict:
         return None
 
 
+def _load_old_rows(data: dict) -> dict:
+    """把旧的 sweep_summary.json 按 combo_id 展开成 dict, 并去重.
+
+    去重规则: 同一个 combo_id 出现多次时保留最后一个(最新)条目.
+    """
+    rows = {}
+    n = data.get("_n_combos", 0)
+    if n == 0:
+        return rows
+
+    keys = [k for k in data.keys()
+            if isinstance(data[k], list) and len(data[k]) == n and not k.startswith("_param_")]
+    param_keys = data.get("_param_keys", [])
+    for i in range(n):
+        cid = data["_combo_id"][i]
+        row = {"_combo": {}}
+        for k in keys:
+            row[k] = data[k][i]
+        for pk in param_keys:
+            arr_key = f"_param_{pk}"
+            if arr_key in data and isinstance(data[arr_key], list):
+                row["_combo"][pk] = data[arr_key][i] if i < len(data[arr_key]) else None
+        rows[cid] = row  # 重复的 combo_id 会被后面的覆盖
+    return rows
+
+
 def sync_summary(sweep_dir: Path) -> dict:
     """遍历磁盘 combo 文件夹, 与 sweep_summary.json 同步.
 
@@ -112,8 +138,16 @@ def sync_summary(sweep_dir: Path) -> dict:
       - 磁盘有、JSON 没有  → 追加
       - JSON 有、磁盘没有  → 删除
       - 两者都有但 scalar 不一致 → 以磁盘 summary.json 更新
+      - JSON 内部 combo_id 重复 → 去重保留最后一个
     """
     data = load_summary(sweep_dir)
+
+    # 先对旧 json 内部去重
+    old_rows = _load_old_rows(data)
+    duplicates_removed = data.get("_n_combos", 0) - len(old_rows)
+    if duplicates_removed > 0:
+        print(f"[sync] 检测到并移除 {duplicates_removed} 个重复 combo_id")
+
     param_keys = list(data.get("_param_keys", []))
 
     # 收集磁盘上所有 combo 文件夹
@@ -145,31 +179,38 @@ def sync_summary(sweep_dir: Path) -> dict:
         "_combo": [],
         "_param_keys": param_keys,
         "_grid": {},
-        "_n_combos": len(disk_combos),
+        "_n_combos": 0,
         "_synced_at": datetime.now().isoformat(),
     }
 
-    # _grid 只保留实际在用的参数，并重建
-    grid_meta = data.get("_grid", {})
+    # _grid 重建
     for k in param_keys:
         vals = set()
+        for r in old_rows.values():
+            if k in r.get("_combo", {}):
+                vals.add(r["_combo"][k])
         for v in disk_combos.values():
             if k in v["config"]:
                 vals.add(v["config"][k])
-        # 标量 or 列表：如果只有一个值，存为列表 [value]；否则存 sorted list
-        vals_list = sorted(vals, key=lambda x: (str(type(x)), x))
-        # 保持原有类型风格：数值按数值排序
         try:
             vals_list = sorted(vals, key=lambda x: (isinstance(x, str), x if isinstance(x, str) else float(x)))
         except Exception:
             vals_list = sorted(vals, key=str)
-        new_data["_grid"][k] = vals_list
+        new_data["_grid"][k] = vals_list if len(vals_list) > 1 else (vals_list[0] if vals_list else None)
 
-    # 填充每个 combo 的数据
-    for combo_id in sorted(disk_combos.keys()):
-        v = disk_combos[combo_id]
-        sm = v["summary"]
-        cfg = v["config"]
+    # 合并：磁盘优先覆盖旧条目
+    merged = {**old_rows}
+    for cid, v in disk_combos.items():
+        merged[cid] = {
+            "_combo": v["config"],
+        }
+        for k in _SUMMARY_SCALAR_KEYS:
+            merged[cid][k] = v["summary"].get(k, None)
+
+    # 填充数组
+    for combo_id in sorted(merged.keys()):
+        row = merged[combo_id]
+        cfg = row.get("_combo", {})
         new_data["_combo_id"].append(combo_id)
         new_data["_combo"].append(cfg)
         for k in param_keys:
@@ -180,7 +221,9 @@ def sync_summary(sweep_dir: Path) -> dict:
         for k in _SUMMARY_SCALAR_KEYS:
             if k not in new_data:
                 new_data[k] = []
-            new_data[k].append(sm.get(k, None))
+            new_data[k].append(row.get(k, None))
+
+    new_data["_n_combos"] = len(merged)
 
     save_summary(sweep_dir, new_data)
     return new_data
