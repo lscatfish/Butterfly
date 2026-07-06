@@ -155,19 +155,19 @@ def _extract_timeseries(out) -> dict:
     """从 SimulationOutput 提取全时程数据 (与 stability_analysis 版本一致)."""
     half = len(out.t) // 2
 
-    Fz_body = np.zeros(len(out.t))
+    Fy_body = np.zeros(len(out.t))
     Fx_body = np.zeros(len(out.t))
-    Fz_world = np.zeros(len(out.t))
+    Fy_world = np.zeros(len(out.t))
     for wn in ["FL", "FR", "BL", "BR"]:
         w = out.wings[wn]
-        Fz_body += w.force_body[:, 2]
+        Fy_body += w.force_body[:, 1]
         Fx_body += w.force_body[:, 0]
-        Fz_world += w.force_world[:, 2]
+        Fy_world += w.force_world[:, 1]
 
-    Fz_f_total = out.wings["FL"].force_body[:, 2] + out.wings["FR"].force_body[:, 2]
-    Fz_b_total = out.wings["BL"].force_body[:, 2] + out.wings["BR"].force_body[:, 2]
-    M_aero = -out.config.x_front * Fz_f_total - out.config.x_back * Fz_b_total
-    M_grav = -out.config.m_total * out.config.g * out.config.d_cg * np.sin(out.theta_p)
+    Fy_f_total = out.wings["FL"].force_body[:, 1] + out.wings["FR"].force_body[:, 1]
+    Fy_b_total = out.wings["BL"].force_body[:, 1] + out.wings["BR"].force_body[:, 1]
+    # 前翅向上力 (Fy>0) 在 z_front>0 产生低头力矩 (负); 后翅在 z_back<0 产生抬头力矩 (正)
+    M_aero = -out.config.z_front * Fy_f_total - out.config.z_back * Fy_b_total
     M_damp = -out.config.c_damp * out.theta_dot
 
     return {
@@ -175,13 +175,12 @@ def _extract_timeseries(out) -> dict:
         "theta_p": out.theta_p,
         "theta_dot": out.theta_dot,
         "theta_ddot": out.theta_ddot,
-        "Fz_body_total": Fz_body,
+        "Fy_body_total": Fy_body,
         "Fx_body_total": Fx_body,
-        "Fz_world_total": Fz_world,
+        "Fy_world_total": Fy_world,
         "M_aero": M_aero,
-        "M_grav": M_grav,
         "M_damp": M_damp,
-        **{f"{wn}_Fz_body": out.wings[wn].force_body[:, 2] for wn in ["FL", "FR", "BL", "BR"]},
+        **{f"{wn}_Fy_body": out.wings[wn].force_body[:, 1] for wn in ["FL", "FR", "BL", "BR"]},
         **{f"{wn}_Fx_body": out.wings[wn].force_body[:, 0] for wn in ["FL", "FR", "BL", "BR"]},
         **{f"{wn}_alpha_eff": out.wings[wn].alpha_eff_deg for wn in ["FL", "FR", "BL", "BR"]},
         **{f"{wn}_C_L": out.wings[wn].C_L for wn in ["FL", "FR", "BL", "BR"]},
@@ -210,11 +209,10 @@ def _extract_summary(out, ts_dict: dict) -> dict:
         "peak_theta_deg": s["peak_theta_deg"],
         "n_exceed_90": s["n_exceed_90"],
         "weight_mN": weight_mN,
-        **_stats(ts_dict["Fz_body_total"] * 1000, "_Fz_body_mN"),
-        **_stats(ts_dict["Fz_world_total"] * 1000, "_Fz_world_mN"),
+        **_stats(ts_dict["Fy_body_total"] * 1000, "_Fy_body_mN"),
+        **_stats(ts_dict["Fy_world_total"] * 1000, "_Fy_world_mN"),
         **_stats(ts_dict["Fx_body_total"] * 1000, "_Fx_body_mN"),
         **_stats(ts_dict["M_aero"] * 1e6, "_M_aero_uNm"),
-        **_stats(ts_dict["M_grav"] * 1e6, "_M_grav_uNm"),
         **_stats(ts_dict["M_damp"] * 1e6, "_M_damp_uNm"),
         **_stats(np.abs(out.theta_dot), "_abs_thetadot_rads"),
         **_stats(np.abs(out.theta_ddot), "_abs_thetaddot_rads2"),
@@ -382,9 +380,8 @@ def sweep_cartesian(grid_spec: dict = None,
 def _build_sweep_summary(results: list, grid_spec: dict, out_root: Path) -> dict:
     """汇总所有 combo 的标量指标到 sweep_summary.json."""
     keys = ["_combo_id", "L/W", "L/W_body", "peak_theta_deg", "n_exceed_90",
-            "mean_Fz_body_mN", "mean_Fz_world_mN", "mean_Fx_body_mN",
+            "mean_Fy_body_mN", "mean_Fy_world_mN", "mean_Fx_body_mN",
             "mean_M_aero_uNm", "peak_M_aero_uNm",
-            "mean_M_grav_uNm", "peak_M_grav_uNm",
             "mean_M_damp_uNm", "peak_M_damp_uNm",
             "mean_abs_thetadot_rads", "peak_abs_thetadot_rads",
             "mean_abs_thetaddot_rads2", "peak_abs_thetaddot_rads2",

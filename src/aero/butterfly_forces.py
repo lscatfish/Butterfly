@@ -8,17 +8,18 @@
   - SimulationConfig: 所有可配置参数
   - SimulationOutput / WingOutput: 结构化输出
 
-坐标系:
-  体轴 (Body): 原点=CG, X=前, Y=右, Z=上
+坐标系 (v6.9, 与 SolidWorks 对齐):
+  体轴 (Body): 原点=CG, X=右, Y=上, Z=前
   世界 (World): θ_p=0时与体轴重合
-  机构平面 = 体轴XZ平面 (四连杆运动平面)
-  机构x→体轴X, 机构y→体轴Z, 机构法向→体轴Y(摇杆旋转轴)
+  翅膀拍动轴: 平行于 Z (左右翅膀共轴)
+  机身俯仰轴: 平行于 X (过总质心 CG)
+  四连杆机构平面: XY 平面 (垂直于拍动轴 Z)
 
 摇杆分解:
   主矢 = 合力沿摇杆方向(A→P2)的分量, 通过连杆传至曲柄
-  主矩 = 对摇杆枢轴A的力矩在Y轴上的分量, 驱动/制动摇杆的有效扭矩
+  主矩 = 对摇杆枢轴A的力矩在Z轴上的分量, 驱动/制动摇杆的有效扭矩
 
-v6.3 LEV/Lee混合C_L/C_D模型, 含气动俯仰阻尼, RK4积分.
+v6.9 坐标系重构: 翅膀拍动绕 Z, 机身俯仰绕 X, 两者垂直, 不再用 psi=phi+theta_p.
 """
 import numpy as np
 import json
@@ -87,14 +88,16 @@ class SimulationConfig:
     phi_offset_deg: float = DESIGN_v69["phi_offset_deg"]
     rotation: str = DESIGN_v69["rotation"]
 
-    # ---- 物理 ----
+    # ---- 物理 (SW 对齐: X=右, Y=上, Z=前; 拍动轴=Z, 俯仰轴=X) ----
     f: float = DESIGN_v69["f"]
     rho: float = DESIGN_v69["rho"]
     m_total: float = DESIGN_v69["m_total"]
-    I_yy: float = DESIGN_v69["I_yy"]
-    d_cg: float = DESIGN_v69["d_cg"]
-    x_front: float = DESIGN_v69["x_front"]
-    x_back: float = DESIGN_v69["x_back"]
+    I_xx: float = DESIGN_v69["I_xx"]
+    x_hinge_right: float = DESIGN_v69["x_hinge_right"]
+    x_hinge_left: float = DESIGN_v69["x_hinge_left"]
+    y_hinge_rel: float = DESIGN_v69["y_hinge_rel"]
+    z_front: float = DESIGN_v69["z_front"]
+    z_back: float = DESIGN_v69["z_back"]
     g: float = DESIGN_v69["g"]
 
     # ---- 数值 ----
@@ -262,24 +265,24 @@ def _cl_cd_blended_scalar(alpha_deg):
 @njit(cache=True, fastmath=True)
 def _wing_forces_scalar(phi, phi_dot, phi_ddot, theta_p, theta_dot,
                          alpha_install_deg, S, R, c_avg, r1, r2_sq,
-                         x_wing, rho, k_3d, k_clap):
-    """Numba标量版单翅气动力 — 返回 (Fz_body, Fx_body)."""
-    psi = phi + theta_p
-    Omega = phi_dot + theta_dot
+                         y_hinge_rel, rho, k_3d, k_clap):
+    """Numba标量版单翅气动力 — 返回 (Fy_body, Fx_body).
+
+    坐标系: X=右, Y=上, Z=前; 翅膀绕 Z 拍动, phi 在 XY 平面内。
+    俯仰绕 X, 铰链有 Y 向偏移 y_hinge_rel, 产生 Δα 修正。
+    """
+    Omega = phi_dot
     abs_Omega = abs(Omega)
     U = abs_Omega * R
 
-    # 俯仰气动阻尼: Δα = atan(θ̇_p·x_wing / U)
-    # U≈0时Δα可达±90°, 但此时F_trans∝U²≈0, 瞬态大攻角无实际力贡献
-    v_pitch = theta_dot * x_wing
+    # 俯仰气动阻尼: Δα = atan(θ̇_p·y_hinge_rel / U)
+    v_pitch = theta_dot * y_hinge_rel
     if abs_Omega < 1e-6:
         delta_alpha_rad = 0.0
     else:
         delta_alpha_rad = np.arctan2(v_pitch, U)
 
-    # 有效攻角：翅膀弦线相对拍动平面(体轴XZ平面)的角度
-    # η = α_install (文献[32]: α=η下拍, α=π-η上拍)
-    # θ_p 使拍动平面整体倾斜, 通过力投影和重力矩体现, 不进入气动攻角
+    # 有效攻角：文献[32]约定，η = α_install，上下拍符号翻转
     eta_rad = alpha_install_deg * np.pi / 180.0
     sign_smooth = np.tanh(phi_dot / 2.0)
     alpha_eff_rad = -sign_smooth * (eta_rad + delta_alpha_rad)
@@ -305,17 +308,18 @@ def _wing_forces_scalar(phi, phi_dot, phi_ddot, theta_p, theta_dot,
     L_eff = (L_trans + F_AM) * k_clap
     D_eff = D_trans * k_clap
 
-    # 体轴系力: Fx=前, Fz=上
-    # sign_Omega 用 tanh 平滑过渡, 避免拍动反转时力跳变
+    # 体轴系力: X=右, Y=上; phi=0 时翅膀弦线沿 +X, 升力沿 +Y
     sign_Omega = np.tanh(Omega / 2.0)
-    Fx = np.sin(psi) * (sign_Omega * D_eff - L_eff)
-    Fz = np.cos(psi) * (L_eff - sign_Omega * D_eff)
+    Fx = np.sin(phi) * (sign_Omega * D_eff - L_eff)
+    Fy = np.cos(phi) * (L_eff - sign_Omega * D_eff)
+    Fz = 0.0
 
     if abs_Omega < 1e-6:
         Fx = 0.0
+        Fy = 0.0
         Fz = 0.0
 
-    return Fz, Fx
+    return Fy, Fx, Fz
 
 
 @njit(cache=True, fastmath=True)
@@ -325,32 +329,37 @@ def _pitch_rhs_numba(theta_p, theta_dot,
                       alpha_f_deg, alpha_b_deg,
                       S_f, R_f, c_avg_f, r1_f, r2_sq_f,
                       S_b, R_b, c_avg_b, r1_b, r2_sq_b,
-                      x_front, x_back,
+                      y_hinge_rel,
+                      z_front, z_back,
                       rho, k_3d,
-                      m_total, g, d_cg, I_yy, c_damp):
-    """Numba标量版俯仰ODE右端项 — 返回 (theta_ddot, Fx_total, Fz_total, M_aero)."""
+                      m_total, g, I_xx, c_damp):
+    """Numba标量版俯仰ODE右端项 — 返回 (theta_ddot, Fx_total, Fy_total, M_aero).
+
+    俯仰轴 = X (过 CG), 气动力在 Y 方向, 力臂 = z_front/z_back。
+    """
     # 前翅
-    Fz_f, Fx_f = _wing_forces_scalar(
+    Fy_f, Fx_f, _ = _wing_forces_scalar(
         pf, pdf, pddf, theta_p, theta_dot,
         alpha_f_deg, S_f, R_f, c_avg_f, r1_f, r2_sq_f,
-        x_front, rho, k_3d, k_clap_f)
+        y_hinge_rel, rho, k_3d, k_clap_f)
 
     # 后翅
-    Fz_b, Fx_b = _wing_forces_scalar(
+    Fy_b, Fx_b, _ = _wing_forces_scalar(
         pb, pdb, pddb, theta_p, theta_dot,
         alpha_b_deg, S_b, R_b, c_avg_b, r1_b, r2_sq_b,
-        x_back, rho, k_3d, k_clap_b)
+        y_hinge_rel, rho, k_3d, k_clap_b)
 
     # 左右对称 ×2
     Fx_total = 2.0 * (Fx_f + Fx_b)
-    Fz_total = 2.0 * (Fz_f + Fz_b)
-    M_aero = 2.0 * (-x_front * Fz_f - x_back * Fz_b)
+    Fy_total = 2.0 * (Fy_f + Fy_b)
+    # 前翅向上力 (Fy>0) 作用在 z_front>0, 产生低头力矩 (负); 后翅在 z_back<0, 产生抬头力矩 (正)
+    M_aero = 2.0 * (-z_front * Fy_f - z_back * Fy_b)
 
-    M_grav = -m_total * g * d_cg * np.sin(theta_p)
+    # 俯仰轴过 CG, 重力矩为 0
     M_damp = -c_damp * theta_dot
-    theta_ddot = (M_aero + M_grav + M_damp) / I_yy
+    theta_ddot = (M_aero + M_damp) / I_xx
 
-    return theta_ddot, Fx_total, Fz_total, M_aero
+    return theta_ddot, Fx_total, Fy_total, M_aero
 
 
 @njit(cache=True, fastmath=True)
@@ -449,29 +458,28 @@ def _interpolate_kinematics(t_arr, t_ext, phi_ext, phi_dot_ext, phi_ddot_ext,
 # ============================================================
 
 def compute_wing_forces_vec(phi, phi_dot, phi_ddot, theta_p, theta_dot,
-                             alpha_install_deg, geo: WingGeometry, x_wing, config: SimulationConfig):
-    """向量化单翅气动力计算.
+                             alpha_install_deg, geo: WingGeometry, y_hinge_rel, config: SimulationConfig):
+    """向量化单翅气动力计算 (v6.9 坐标系).
+
+    坐标系: X=右, Y=上, Z=前; 翅膀绕 Z 拍动, phi 在 XY 平面内。
+    俯仰绕 X, 铰链有 Y 向偏移 y_hinge_rel, 产生 Δα 修正。
 
     返回 dict:
-      F_body: (N,3) 体轴力
+      F_body: (N,3) 体轴力 (Fx, Fy, Fz)
       alpha_eff_deg: (N,)
       C_L, C_D: (N,)
-      psi: (N,) 世界系中翅膀角度
-      Omega: (N,) 总角速度
+      Omega: (N,) 拍动角速度
     """
     N = len(phi)
-    psi = phi + theta_p
-    Omega = phi_dot + theta_dot
+    Omega = phi_dot
     U = np.abs(Omega) * geo.R
 
-    # 俯仰气动阻尼: Δα = atan(θ̇_p·x_wing / U)
-    # U≈0时Δα可达±90°, 但此时F_trans∝U²≈0, 瞬态大攻角无实际力贡献
-    v_pitch = theta_dot * x_wing
+    # 俯仰气动阻尼: Δα = atan(θ̇_p·y_hinge_rel / U)
+    v_pitch = theta_dot * y_hinge_rel
     with np.errstate(divide='ignore', invalid='ignore'):
         delta_alpha_rad = np.arctan2(v_pitch, U + 1e-6)
 
-    # 有效攻角：翅膀弦线相对拍动平面(体轴XZ平面)的角度
-    # η = α_install (文献[32]: α=η下拍, α=π-η上拍)
+    # 有效攻角：文献[32]约定
     eta_rad = np.deg2rad(alpha_install_deg)
     sign_smooth = np.tanh(phi_dot / 2.0)
     alpha_eff_rad = -sign_smooth * (eta_rad + delta_alpha_rad)
@@ -493,95 +501,90 @@ def compute_wing_forces_vec(phi, phi_dot, phi_ddot, theta_p, theta_dot,
     alpha_dot = np.zeros(N)
     F_rot = config.rho * config.C_rot * alpha_dot * phi_dot * geo.c_avg**2 * geo.R * config.r_rot
 
-    # Clap-and-Fling: 速度-位置耦合增强 (Lighthill Γ=g(λ)φ̇c²)
-    # k_extra ∝ |φ̇|/φ̇_peak × cos²窗(距端点距离)
-    # 端点处 φ̇→0 增强自动归零, 增强峰值在端点附近速度尚存处
+    # Clap-and-Fling: 速度-位置耦合增强
     k_clap_extra = compute_clap_fling_window(phi, phi_dot, edge_width=0.10)
     k_clap = 1.0 + config.k_clap * k_clap_extra
 
     L_eff = (L_trans + F_AM + F_rot) * k_clap
     D_eff = D_trans * k_clap
 
-    # 体轴系力: Fx=前, Fz=上
-    Fx = np.sin(psi) * (sign_Omega * D_eff - L_eff)
-    Fz = np.cos(psi) * (L_eff - sign_Omega * D_eff)
+    # 体轴系力: X=右, Y=上; phi=0 时翅膀弦线沿 +X, 升力沿 +Y
+    Fx = np.sin(phi) * (sign_Omega * D_eff - L_eff)
+    Fy = np.cos(phi) * (L_eff - sign_Omega * D_eff)
+    Fz = np.zeros(N)
 
     mask_still = np.abs(Omega) < 1e-6
     Fx = np.where(mask_still, 0.0, Fx)
+    Fy = np.where(mask_still, 0.0, Fy)
     Fz = np.where(mask_still, 0.0, Fz)
 
     F_body = np.zeros((N, 3))
     F_body[:, 0] = Fx
+    F_body[:, 1] = Fy
     F_body[:, 2] = Fz
 
     return {
         "F_body": F_body,
         "alpha_eff_deg": alpha_eff_deg,
         "C_L": C_L, "C_D": C_D,
-        "psi": psi, "Omega": Omega, "k_clap": k_clap,
+        "Omega": Omega, "k_clap": k_clap,
     }
 
 
-def compute_cop_vec(phi, geo: WingGeometry, x_wing, y_hinge, z_hinge, side_sign):
-    """向量化气动中心位置.
+def compute_cop_vec(phi, geo: WingGeometry, x_hinge, y_hinge_rel, z_hinge, side_sign):
+    """向量化气动中心位置 (v6.9 坐标系).
 
-    side_sign: +1 (右翅, +Y) / -1 (左翅, -Y)
+    side_sign: +1 (右翅, +Z 展向) / -1 (左翅, -Z 展向)
 
-    CoP = hinge_pos + spanwise_offset + chordwise_offset.
-    - 展向: r1 * R 沿 Y
-    - 弦向: c_avg/4 在 XZ 平面内, 方向随 phi 变化
+    CoP = hinge_pos + chordwise_offset + spanwise_offset.
+    - 弦向: c_avg/4 在 XY 平面内, 方向随 phi 变化
+    - 展向: r1 * R 沿 Z
     """
     N = len(phi)
     cop = np.zeros((N, 3))
-    cop[:, 0] = x_wing + (geo.c_avg / 4.0) * np.cos(phi)   # 弦向在X的投影
-    cop[:, 1] = y_hinge + side_sign * geo.r1 * geo.R         # 展向
-    cop[:, 2] = z_hinge + (geo.c_avg / 4.0) * np.sin(phi)   # 弦向在Z的投影
+    cop[:, 0] = x_hinge + (geo.c_avg / 4.0) * np.cos(phi)   # 弦向 X
+    cop[:, 1] = y_hinge_rel + (geo.c_avg / 4.0) * np.sin(phi)  # 弦向 Y
+    cop[:, 2] = z_hinge + side_sign * geo.r1 * geo.R         # 展向 Z
     return cop
 
 
-def rocker_decompose(F_body, cop_body, phi, config: SimulationConfig, x_wing, y_hinge):
-    """摇杆力分解: 主矢 + 主矩.
+def rocker_decompose(F_body, cop_body, phi, config: SimulationConfig, x_hinge, y_hinge_rel):
+    """摇杆力分解: 主矢 + 主矩 (v6.9 坐标系).
 
-    摇杆枢轴 A (机构坐标): (0, mech_a) mm
-    在体轴系: A_body = (x_wing, y_hinge, mech_a/1000)
-
-    机构平面 = 体轴 XZ 平面.
-    摇杆方向: 从 A 指向 P2, 在 XZ 平面内变化.
-    摇杆机构角 = phi - phi_offset (即原始solve_phi输出).
+    摇杆枢轴 A 在体轴系: A_body = (x_hinge, y_hinge_rel, mech_a/1000)
+    摇杆机构平面 = XY 平面 (垂直于拍动轴 Z).
+    摇杆方向: 从 A 指向 P2, 在 XY 平面内变化, 方向角 = phi - phi_offset.
 
     主矢: F_body 沿摇杆方向的分量
-    主矩: 对 A 的力矩在 Y 轴上的分量
+    主矩: 对 A 的力矩在 Z 轴上的分量
     """
     N = len(phi)
     a_m = config.mech_a / 1000.0
-    l_m = config.mech_l / 1000.0
 
     # 枢轴 A 在体轴系
-    A_body = np.array([x_wing, y_hinge, a_m])
+    A_body = np.array([x_hinge, y_hinge_rel, a_m])
 
     # 摇杆机构角 (去除安装偏角后的原始机构角度)
     phi_mech = phi - np.deg2rad(config.phi_offset_deg)
 
-    # 摇杆方向单位矢量 (在 XZ 平面内)
-    # 摇杆从A到P2, 方向角 = phi_mech (机构x→体轴X, 机构y→体轴Z)
+    # 摇杆方向单位矢量 (在 XY 平面内)
     d_rocker = np.zeros((N, 3))
-    d_rocker[:, 0] = np.cos(phi_mech)  # 体轴X分量
-    d_rocker[:, 2] = np.sin(phi_mech)  # 体轴Z分量
-    # 归一化 (应该已是单位矢量, 但确保)
-    norm = np.sqrt(d_rocker[:, 0]**2 + d_rocker[:, 2]**2)
+    d_rocker[:, 0] = np.cos(phi_mech)  # 体轴 X 分量
+    d_rocker[:, 1] = np.sin(phi_mech)  # 体轴 Y 分量
+    # 归一化
+    norm = np.sqrt(d_rocker[:, 0]**2 + d_rocker[:, 1]**2)
     d_rocker[:, 0] /= norm
-    d_rocker[:, 2] /= norm
+    d_rocker[:, 1] /= norm
 
     # ---- 主矢: 力沿摇杆方向的分量 ----
     F_dot_rocker = np.sum(F_body * d_rocker, axis=1)  # (N,)
     principal_vec = d_rocker * F_dot_rocker[:, np.newaxis]  # (N,3)
 
-    # ---- 主矩: 对枢轴A的力矩在Y轴上的分量 ----
+    # ---- 主矩: 对枢轴A的力矩在Z轴上的分量 ----
     r_from_A = cop_body - A_body[np.newaxis, :]  # (N,3) 从A到CoP的矢量
     M_about_A = np.cross(r_from_A, F_body)        # (N,3) 对A的力矩
-    # Y分量 = 机构平面内的有效扭矩
     principal_moment = np.zeros((N, 3))
-    principal_moment[:, 1] = M_about_A[:, 1]      # 仅保留Y分量
+    principal_moment[:, 2] = M_about_A[:, 2]      # 仅保留Z分量
 
     # 摇杆方向角 (用于调用方参考)
     rocker_angle = phi_mech
@@ -594,7 +597,7 @@ def rocker_decompose(F_body, cop_body, phi, config: SimulationConfig, x_wing, y_
 # ============================================================
 
 def body_to_world(vec_body, theta_p):
-    """体轴系→世界系: R_y(θ_p) 旋转.
+    """体轴系→世界系: R_x(θ_p) 旋转 (v6.9 俯仰绕 X).
 
     vec_body: (N,3) 或 (3,)
     theta_p: (N,) 或 scalar
@@ -615,9 +618,9 @@ def body_to_world(vec_body, theta_p):
     N = vec.shape[0]
 
     vec_w = np.zeros_like(vec)
-    vec_w[:, 0] = cos_t * vec[:, 0] + sin_t * vec[:, 2]
-    vec_w[:, 1] = vec[:, 1]
-    vec_w[:, 2] = -sin_t * vec[:, 0] + cos_t * vec[:, 2]
+    vec_w[:, 0] = vec[:, 0]
+    vec_w[:, 1] = cos_t * vec[:, 1] - sin_t * vec[:, 2]
+    vec_w[:, 2] = sin_t * vec[:, 1] + cos_t * vec[:, 2]
 
     if was_1d:
         vec_w = vec_w[0]
@@ -636,27 +639,28 @@ def _compute_pitch_rhs_scalar(theta_p, theta_dot,
     r_f = compute_wing_forces_vec(
         np.array([phi_f]), np.array([phi_dot_f]), np.array([phi_ddot_f]),
         np.array([theta_p]), np.array([theta_dot]),
-        config.alpha_front_deg, geo_f, config.x_front, config)
+        config.alpha_front_deg, geo_f, config.y_hinge_rel, config)
     r_b = compute_wing_forces_vec(
         np.array([phi_b]), np.array([phi_dot_b]), np.array([phi_ddot_b]),
         np.array([theta_p]), np.array([theta_dot]),
-        config.alpha_back_deg, geo_b, config.x_back, config)
+        config.alpha_back_deg, geo_b, config.y_hinge_rel, config)
 
-    Fz_f = r_f["F_body"][0, 2]
-    Fz_b = r_b["F_body"][0, 2]
+    Fy_f = r_f["F_body"][0, 1]
+    Fy_b = r_b["F_body"][0, 1]
     Fx_f = r_f["F_body"][0, 0]
     Fx_b = r_b["F_body"][0, 0]
 
     # 左右对称 x2
     Fx_total = 2.0 * (Fx_f + Fx_b)
-    Fz_total = 2.0 * (Fz_f + Fz_b)
-    M_aero = 2.0 * (-config.x_front * Fz_f - config.x_back * Fz_b)
+    Fy_total = 2.0 * (Fy_f + Fy_b)
+    # 前翅向上力 (Fy>0) 在 z_front>0 处产生低头力矩 (负)
+    M_aero = 2.0 * (-config.z_front * Fy_f - config.z_back * Fy_b)
 
-    M_grav = -config.m_total * config.g * config.d_cg * np.sin(theta_p)
+    # 俯仰轴过 CG, 重力矩为 0
     M_damp = -config.c_damp * theta_dot
-    theta_ddot = (M_aero + M_grav + M_damp) / config.I_yy
+    theta_ddot = (M_aero + M_damp) / config.I_xx
 
-    return float(theta_ddot), float(Fx_total), float(Fz_total), float(M_aero)
+    return float(theta_ddot), float(Fx_total), float(Fy_total), float(M_aero)
 
 
 def _rk4_step_full(tp, td, dt, phi_f, phi_dot_f, phi_ddot_f,
@@ -778,9 +782,10 @@ class ButterflyForceModel:
                 cfg.alpha_front_deg, cfg.alpha_back_deg,
                 geo_f.S, geo_f.R, geo_f.c_avg, geo_f.r1, geo_f.r2_sq,
                 geo_b.S, geo_b.R, geo_b.c_avg, geo_b.r1, geo_b.r2_sq,
-                cfg.x_front, cfg.x_back,
+                cfg.y_hinge_rel,
+                cfg.z_front, cfg.z_back,
                 cfg.rho, cfg.k_3d,
-                cfg.m_total, cfg.g, cfg.d_cg, cfg.I_yy, cfg.c_damp,
+                cfg.m_total, cfg.g, cfg.I_xx, cfg.c_damp,
             )
             for i in range(n_steps - 1):
                 tp[i+1], td[i+1] = _rk4_step_numba(
@@ -813,13 +818,13 @@ class ButterflyForceModel:
 
         wings_out = {}
         wing_specs = [
-            ("FL", geo_f, cfg.alpha_front_deg, cfg.x_front, -0.010, 0.0, -1),
-            ("FR", geo_f, cfg.alpha_front_deg, cfg.x_front, +0.010, 0.0, +1),
-            ("BL", geo_b, cfg.alpha_back_deg,  cfg.x_back,  -0.010, 0.0, -1),
-            ("BR", geo_b, cfg.alpha_back_deg,  cfg.x_back,  +0.010, 0.0, +1),
+            ("FL", geo_f, cfg.alpha_front_deg, cfg.x_hinge_left,  cfg.y_hinge_rel, cfg.z_front, -1.0),
+            ("FR", geo_f, cfg.alpha_front_deg, cfg.x_hinge_right, cfg.y_hinge_rel, cfg.z_front, +1.0),
+            ("BL", geo_b, cfg.alpha_back_deg,  cfg.x_hinge_left,  cfg.y_hinge_rel, cfg.z_back,  -1.0),
+            ("BR", geo_b, cfg.alpha_back_deg,  cfg.x_hinge_right, cfg.y_hinge_rel, cfg.z_back,  +1.0),
         ]
 
-        for name, geo, alpha_inst, x_w, y_hinge, z_hinge, side_sign in wing_specs:
+        for name, geo, alpha_inst, x_h, y_hinge_rel, z_hinge, side_sign in wing_specs:
             # 该翅的运动学 (FL/FR共享Front, BL/BR共享Back)
             if name.startswith("F"):
                 p, pd, pdd = phi_f, phi_dot_f, phi_ddot_f
@@ -827,9 +832,9 @@ class ButterflyForceModel:
                 p, pd, pdd = phi_b, phi_dot_b, phi_ddot_b
 
             r = compute_wing_forces_vec(
-                p, pd, pdd, tp, td, alpha_inst, geo, x_w, cfg)
+                p, pd, pdd, tp, td, alpha_inst, geo, y_hinge_rel, cfg)
 
-            cop = compute_cop_vec(p, geo, x_w, y_hinge, z_hinge, float(side_sign))
+            cop = compute_cop_vec(p, geo, x_h, y_hinge_rel, z_hinge, float(side_sign))
             # 力矩 = r × F (对CG, CG在原点)
             M_body = np.cross(cop, r["F_body"])
 
@@ -839,7 +844,7 @@ class ButterflyForceModel:
             M_world = body_to_world(M_body, tp)
 
             # 摇杆分解
-            pv, pm, ra = rocker_decompose(r["F_body"], cop, p, cfg, x_w, y_hinge)
+            pv, pm, ra = rocker_decompose(r["F_body"], cop, p, cfg, x_h, y_hinge_rel)
 
             wings_out[name] = WingOutput(
                 name=name,
@@ -858,23 +863,23 @@ class ButterflyForceModel:
             )
 
         # ---- Summary ----
-        # 体轴系 Fz (与原始 scan_v6_3 一致)
-        Fz_body_total = np.zeros(n_steps)
+        # v6.9: 升力沿体轴 +Y, 世界系经 R_x(theta_p) 变换
+        Fy_body_total = np.zeros(n_steps)
         Fx_body_total = np.zeros(n_steps)
-        Fz_world_total = np.zeros(n_steps)
+        Fy_world_total = np.zeros(n_steps)
         for name in ["FL", "FR", "BL", "BR"]:
-            Fz_body_total += wings_out[name].force_body[:, 2]
+            Fy_body_total += wings_out[name].force_body[:, 1]
             Fx_body_total += wings_out[name].force_body[:, 0]
-            Fz_world_total += wings_out[name].force_world[:, 2]
+            Fy_world_total += wings_out[name].force_world[:, 1]
 
         weight_N = cfg.m_total * cfg.g
         half = n_steps // 2
         steady_idx = int(cfg.steady_start / cfg.dt) if cfg.steady_start < cfg.t_end else half
-        avg_Fz_body = np.mean(Fz_body_total[steady_idx:])
-        avg_Fz_world = np.mean(Fz_world_total[steady_idx:])
+        avg_Fy_body = np.mean(Fy_body_total[steady_idx:])
+        avg_Fy_world = np.mean(Fy_world_total[steady_idx:])
         avg_Fx_body = np.mean(Fx_body_total[steady_idx:])
-        lw_body = avg_Fz_body / weight_N
-        lw_world = avg_Fz_world / weight_N  # 真正的物理升重比
+        lw_body = avg_Fy_body / weight_N
+        lw_world = avg_Fy_world / weight_N  # 真正的物理升重比
 
         tp_deg = np.rad2deg(tp)
         peak_all = float(np.max(np.abs(tp_deg)))
@@ -883,8 +888,8 @@ class ButterflyForceModel:
         summary = {
             "L/W": float(lw_world),         # 世界系升重比 (物理悬停判据)
             "L/W_body": float(lw_body),     # 体轴系升重比 (机构分析用)
-            "avg_Fz_body_mN": float(avg_Fz_body * 1000),
-            "avg_Fz_world_mN": float(avg_Fz_world * 1000),
+            "avg_Fy_body_mN": float(avg_Fy_body * 1000),
+            "avg_Fy_world_mN": float(avg_Fy_world * 1000),
             "avg_Fx_body_mN": float(avg_Fx_body * 1000),
             "weight_mN": float(weight_N * 1000),
             "peak_theta_deg": peak_all,
@@ -897,7 +902,7 @@ class ButterflyForceModel:
 
         if progress:
             status = "✅ STABLE" if n90 == 0 else "❌ DIVERGED"
-            print(f"[ButterflyForceModel] {status} | L/W={lw_world:.3f} (world) / {lw_body:.3f} (body) | peak={peak_all:.1f}° | n90={n90} | Fz_body={avg_Fz_body*1000:+.0f}mN | Fz_world={avg_Fz_world*1000:+.0f}mN")
+            print(f"[ButterflyForceModel] {status} | L/W={lw_world:.3f} (world) / {lw_body:.3f} (body) | peak={peak_all:.1f}° | n90={n90} | Fy_body={avg_Fy_body*1000:+.0f}mN | Fy_world={avg_Fy_world*1000:+.0f}mN")
 
         return SimulationOutput(
             t=t, theta_p=tp, theta_dot=td, theta_ddot=tdd,
@@ -942,8 +947,8 @@ class ButterflyForceModel:
             res = {**ov,
                    "L/W": s["L/W"], "peak_deg": s["peak_theta_deg"],
                    "n90": s["n_exceed_90"],
-                   "Fz_body_mN": s["avg_Fz_body_mN"],
-                   "Fz_world_mN": s["avg_Fz_world_mN"],
+                   "Fy_body_mN": s["avg_Fy_body_mN"],
+                   "Fy_world_mN": s["avg_Fy_world_mN"],
                    }
             results.append(res)
 
@@ -1005,11 +1010,11 @@ if __name__ == "__main__":
     s1 = out1.summary
     print(f"  L/W={s1['L/W']:.3f} (expected ~4.5) | peak={s1['peak_theta_deg']:.1f}° | n90={s1['n_exceed_90']}")
     print(f"  α_eff FL: [{np.min(out1.wings['FL'].alpha_eff_deg):.0f}°, {np.max(out1.wings['FL'].alpha_eff_deg):.0f}°]")
-    print(f"  Fz_body={s1['avg_Fz_body_mN']:+.0f}mN | Fz_world={s1['avg_Fz_world_mN']:+.0f}mN | weight={s1['weight_mN']:.0f}mN")
+    print(f"  Fy_body={s1['avg_Fy_body_mN']:+.0f}mN | Fy_world={s1['avg_Fy_world_mN']:+.0f}mN | weight={s1['weight_mN']:.0f}mN")
     print(f"  Wings: {list(out1.wings.keys())}")
     for name, wo in out1.wings.items():
         print(f"    {name}: F_body max={np.max(np.abs(wo.force_body)):.4f}N  "
-              f"CoP_y={wo.cop_body[0,1]:.4f}m  "
+              f"CoP_z={wo.cop_body[0,2]:.4f}m  "
               f"rocker_pv_max={np.max(np.abs(wo.rocker_principal_vec)):.4f}N  "
               f"rocker_pm_max={np.max(np.abs(wo.rocker_principal_moment)):.6f}N·m")
 

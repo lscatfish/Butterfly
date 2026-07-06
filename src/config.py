@@ -48,10 +48,18 @@ def _load_yaml():
 def get_design() -> dict:
     """返回完整设计参数 dict，与旧 DESIGN_v69 dict 格式兼容。
 
+    坐标系（与 SolidWorks 对齐）：
+      - X : 左右（右为正）
+      - Y : 上下（上为正）
+      - Z : 前后（前为正）
+      - 翅膀拍动轴：Z
+      - 机身俯仰轴：X（过 CG）
+
     包含：
       - 翅膀安装 (alpha_front_deg, alpha_back_deg, phase_diff_deg)
       - 机构参数 (mech_a, mech_b, mech_R, mech_c, mech_l, phi_offset_deg, rotation)
-      - 物理常数 (f, rho, m_total, I_yy, d_cg, x_front, x_back, g)
+      - 物理常数 (f, rho, m_total, I_xx, x_hinge_right, x_hinge_left,
+                   y_hinge_rel, z_front, z_back, g)
       - 数值参数 (dt, t_end, theta0_deg, steady_start)
       - 气动系数 (k_3d, C_rot, r_rot, k_clap, c_damp)
     """
@@ -75,10 +83,12 @@ def get_design() -> dict:
         "f": float(p["f"]),
         "rho": float(p["rho"]),
         "m_total": float(p["m_total"]),
-        "I_yy": float(p["I_yy"]),
-        "d_cg": float(p["d_cg"]),
-        "x_front": float(p["x_front"]),
-        "x_back": float(p["x_back"]),
+        "I_xx": float(p["I_xx"]),
+        "x_hinge_right": float(p["x_hinge_right"]),
+        "x_hinge_left": float(p["x_hinge_left"]),
+        "y_hinge_rel": float(p["y_hinge_rel"]),
+        "z_front": float(p["z_front"]),
+        "z_back": float(p["z_back"]),
         "g": float(p["g"]),
         "k_3d": float(a["k_3d"]),
         "C_rot": float(a["C_rot"]),

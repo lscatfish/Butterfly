@@ -98,7 +98,9 @@ def simulate_mechanical_wing(
     phi_dot: np.ndarray,
     phi_ddot: np.ndarray,
     alpha_install_deg: float,
-    x_wing: float,
+    x_hinge: float,
+    y_hinge_rel: float,
+    z_hinge: float,
 ) -> dict:
     """Map the new force model into the simplified fields used by this report."""
     theta_p = np.zeros_like(phi)
@@ -111,18 +113,19 @@ def simulate_mechanical_wing(
         theta_dot,
         alpha_install_deg,
         wing_geo,
-        x_wing,
+        y_hinge_rel,
         cfg,
     )
-    cop = compute_cop_vec(phi, wing_geo, x_wing, y_hinge=0.010, z_hinge=0.0, side_sign=1.0)
+    cop = compute_cop_vec(phi, wing_geo, x_hinge, y_hinge_rel, z_hinge, side_sign=1.0)
     _, rocker_moment, _ = rocker_decompose(
-        force_result["F_body"], cop, phi, cfg, x_wing, y_hinge=0.010
+        force_result["F_body"], cop, phi, cfg, x_hinge, y_hinge_rel
     )
 
     r_eff = geo_item["R"] * geo_item["r1"]
     m_wing = cfg.m_total / 4.0
     i_w = m_wing * geo_item["R"] ** 2 * geo_item["r2_sq"]
-    m_aero_raw = rocker_moment[:, 1]
+    # v6.9: 摇杆主矩保留 Z 分量 (绕拍动轴 Z)
+    m_aero_raw = rocker_moment[:, 2]
     m_aero = periodic_hann_smooth(m_aero_raw, window=21)
     m_inertial = i_w * phi_ddot
     p_aero = m_aero * phi_dot
@@ -204,7 +207,9 @@ def compute_results() -> dict:
         mech_phi_dot,
         mech_phi_ddot,
         cfg.alpha_front_deg,
-        cfg.x_front,
+        cfg.x_hinge_right,
+        cfg.y_hinge_rel,
+        cfg.z_front,
     )
     back = simulate_mechanical_wing(
         "Back",
@@ -215,7 +220,9 @@ def compute_results() -> dict:
         back_phi_dot,
         back_phi_ddot,
         cfg.alpha_back_deg,
-        cfg.x_back,
+        cfg.x_hinge_right,
+        cfg.y_hinge_rel,
+        cfg.z_back,
     )
     combined = four_wing_series(front, back)
 
@@ -1374,13 +1381,13 @@ i13  = i12 · i2'3 = (+)1600/49 = 32.653
 | 前翅 | {geo['Front']['S_mm2']:.1f} | {geo['Front']['R_mm']:.1f} | {geo['Front']['c_avg_mm']:.1f} | {geo['Front']['r1']:.4f} | {geo['Front']['r2_sq']:.4f} |
 | 后翅 | {geo['Back']['S_mm2']:.1f} | {geo['Back']['R_mm']:.1f} | {geo['Back']['c_avg_mm']:.1f} | {geo['Back']['r1']:.4f} | {geo['Back']['r2_sq']:.4f} |
 
-这里为了避免和机构曲柄半径 `R` 混淆，表中把翅膀展长记为 `Rw`。在 `butterfly_forces.py` 中，翅膀气动力被进一步分解为体轴力、对重心力矩，以及对摇杆枢轴 A 的有效主矩 `rocker_principal_moment[:, 1]`。
+这里为了避免和机构曲柄半径 `R` 混淆，表中把翅膀展长记为 `Rw`。在 `butterfly_forces.py` 中，翅膀气动力被进一步分解为体轴力、对重心力矩，以及对摇杆枢轴 A 的有效主矩 `rocker_principal_moment[:, 2]` (v6.9 坐标系下为 Z 分量)。
 
 机械原理分析中不放翅膀自由体图，只把上层气动模型给出的翅膀负载等效成作用在摇杆上的外载力矩：
 
 ```text
 M_wing = M_aero_about_A + I_w · phi_ddot
-M_aero_about_A 取自 rocker_principal_moment 的 Y 分量
+M_aero_about_A 取自 rocker_principal_moment 的 Z 分量
 I_w ≈ m_w · Rw² · r2_sq
 ```
 
