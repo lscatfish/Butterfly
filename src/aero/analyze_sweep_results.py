@@ -286,6 +286,16 @@ def format_value(v) -> str:
     return str(v)
 
 
+def _html_escape(v) -> str:
+    """转义 HTML 特殊字符."""
+    s = str(v) if v is not None else "N/A"
+    return (s
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;"))
+
+
 def generate_report(data: dict, combos: list, top_n: int, max_peak_theta: float) -> str:
     """生成 Markdown 报告."""
     param_keys = data.get("_param_keys", [])
@@ -361,25 +371,35 @@ def generate_report(data: dict, combos: list, top_n: int, max_peak_theta: float)
                 lines.append(f"| {format_value(val)} | {cnt} |")
             lines.append("")
 
-    # 全部稳定组合表
+    # 全部稳定组合表（使用 HTML table，避免长 Markdown 表格在某些阅读器里被压成一行）
     if combos:
         lines.append("## 全部稳定组合")
         lines.append("")
         display_keys = [k for k in scan_keys if k in combos[0]]
-        header = "| combo_id | L/W | peak θ | Fy_world | " + " | ".join(display_keys) + " |"
-        lines.append(header)
-        sep = "|---" * (5 + len(display_keys)) + "|"
-        lines.append(sep)
+        col_names = ["combo_id", "L/W", "peak θ", "Fy_world"] + display_keys
+        lines.append("<table>")
+        lines.append("<thead><tr>" +
+                     "".join(f"<th>{_html_escape(c)}</th>" for c in col_names) +
+                     "</tr></thead>")
+        lines.append("<tbody>")
         for c in combos:
-            row = f"| `{c['_combo_id']}` | {c['L/W']:.3f} | {c['peak_theta_deg']:.1f}° | {c['mean_Fy_world_mN']:.1f} |"
-            for k in display_keys:
-                row += f" {format_value(c[k])} |"
-            lines.append(row)
+            vals = [
+                c["_combo_id"],
+                f"{c['L/W']:.3f}",
+                f"{c['peak_theta_deg']:.1f}°",
+                f"{c['mean_Fy_world_mN']:.1f}",
+            ] + [format_value(c[k]) for k in display_keys]
+            lines.append("<tr>" +
+                         "".join(f"<td>{_html_escape(v)}</td>" for v in vals) +
+                         "</tr>")
+        lines.append("</tbody></table>")
         lines.append("")
 
+    lines.append("")
     lines.append("---")
+    lines.append("")
     lines.append("报告由 `src/aero/analyze_sweep_results.py` 自动生成。")
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def main():
