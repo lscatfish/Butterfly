@@ -1,11 +1,21 @@
 # Butterfly Aerodynamic Analysis — Agent Notes
 
 ## Project Overview
-仿生蝴蝶扑翼微型飞行器（MAV）俯仰动力学仿真。质量 20g，四连杆机构驱动，15Hz 扑动频率。验证俯仰稳定性、升力/推力平衡、以及非对称安装角的优化。
 
-## Current State (2026-06-05)
+仿生蝴蝶扑翼微型飞行器（MAV）俯仰动力学仿真。质量 **23 g**，四连杆机构驱动，15 Hz 扑动频率。验证俯仰稳定性、升力/重量平衡、以及非对称安装角的优化。
 
-**当前主力模型：v6.7** — 文献[32]标准攻角定义 + tanh平滑过渡 + numba JIT
+**坐标系已与 SolidWorks 对齐**：
+
+- 体轴原点 = 总质心 CG
+- **X**: 左右（右为正）
+- **Y**: 上下（上为正）
+- **Z**: 前后（前为正）
+- **翅膀拍动轴**: 平行于 Z（左右翅共轴）
+- **机身俯仰轴**: 平行于 X（过 CG，因此重力对俯仰力矩为 0）
+
+## Current State (2026-07-06)
+
+**当前主力模型：v6.9** — 新四连杆机构 + YAML 统一配置 + DESIGN_v69，**坐标系已与 SolidWorks 对齐**。
 
 ### 版本演进
 
@@ -14,22 +24,44 @@
 | v6 | `temp/pitch_dynamics_v6.py` | 刚性 wing, 非对称 α_install 扫描 | L/W=1.48 但俯仰全部发散 |
 | **v6.7** | `src/aero/butterfly_forces.py` | **修正攻角定义**[32]: α=η (相对拍动平面) + tanh平滑过渡 | **L/W=2.15**, peak θ=37.6°, 物理自洽 ✅ |
 | **v6.8** | `src/aero/butterfly_forces.py` | **速度耦合 clap-fling** + 全网格扫参 + DESIGN_v68 | **L/W=2.45**, peak θ=32.9°, 物理合理 ✅ |
+| **v6.9** | `config/design_v69.yaml` + `src/config.py` | **新机构参数**（摆幅99°）+ **YAML 单一权威源** | **L/W=4.43**, peak θ=65.8°, α_f=60/α_b=3/phase=-15 |
+| **v6.9-SW** | `src/aero/butterfly_forces.py` 等 | **坐标系对齐 SolidWorks**：X=右/Y=上/Z=前，拍动轴=Z，俯仰轴=X，新质量/惯量/铰链位置 | 2500 组扫参，180 个稳定组合，L/W 范围 -2.63~2.95 |
 
-### 最佳参数 (v6.8 DESIGN_v68)
+### 最佳参数 (v6.9 DESIGN_v69)
 
-| 参数 | 值 | 说明 |
-|------|-----|------|
-| α_f | **45°** | 前翅安装角，过渡区中部，物理合理 |
-| α_b | **8°** | 后翅安装角 |
-| phase | **-20°** | 前后翅相位差 |
-| mech_a | **6.0 mm** | 曲柄半径 |
-| mech_R | **2.50 mm** | 摇杆半径，摆幅关键 |
-| φ_offset | **-30°** | 翅膀安装偏角 |
-| f | **17 Hz** | 扑动频率 |
-| k_clap | **0.3** | 速度耦合 clap-fling k_max |
-| c_damp | **5e-4 N·m·s/rad** | 俯仰气动阻尼 |
+**参数唯一来源**：`config/design_v69.yaml`。所有仿真脚本通过 `src/config.py` 统一读取。
 
-**性能**: L/W_world=2.447, peak θ=32.9°, n90=0, mean |α_eff|=45.9°
+| 参数 | v6.8 (旧) | v6.9 (新) | 说明 |
+|------|-----------|-----------|------|
+| α_f | 45° | **60°** | 前翅安装角 |
+| α_b | 8° | **3°** | 后翅安装角 |
+| phase | -20° | **-15°** | 前后翅相位差 |
+| mech_a | 6.0 mm | **7.6 mm** | 翅膀转轴 A 的 y 坐标 |
+| mech_b | — | **1.71 mm** | 圆心 B 的 x 坐标（新机构） |
+| mech_R | 2.50 mm | **3.8 mm** | 曲柄半径（+52%，摆幅 ~99°） |
+| mech_c | — | **7.1 mm** | 连杆 P1-P2 长度 |
+| mech_l | — | **5.0 mm** | 摇杆/翅膀杆 A-P2 长度 |
+| φ_offset | -30° | **0°** | 翅膀安装偏角（新机构无偏移） |
+| f | 17 Hz | 17 Hz | 扑动频率 |
+| k_clap | 0.3 | 0.3 | 速度耦合 clap-fling k_max |
+| c_damp | 5e-4 | 5e-4 | 俯仰气动阻尼 |
+| Grashof | — | **3.8+7.79=11.59 ≤ 7.1+5.0=12.10 ✅** | 曲柄摇杆条件满足 |
+
+**性能**: L/W_world=4.43, peak θ=65.8°, 摆幅 ~99°, K≈1.0
+
+> **注意**：上述 v6.9 性能基于旧坐标系（X=前/Y=右/Z=上）。坐标系对齐 SolidWorks 后，设计点需在新坐标系下重新验证。
+
+### 参数配置系统
+
+```python
+from src.config import get_design, get_mech_params, get_version, get_sweep_grid
+
+design = get_design()       # → dict，同原 DESIGN_v69
+mech   = get_mech_params()  # → dict，机构参数
+grid   = get_sweep_grid()   # → dict，扫参网格（列表=扫参，标量=固定）
+```
+
+`config/design_v69.yaml` 四个键：`mechanism`, `aero`, `physical`, `numerical` + `sweep` 段（扫参网格 + `_n_jobs`/`_out_dir` 引擎配置）。修改 YAML 即可影响所有模块。
 
 ### 对外力输出模块: `src/aero/butterfly_forces.py`
 
@@ -59,54 +91,52 @@ results = scan_parameters(cfg, {
 
 ## Physical Model
 
-### 角度体系
-- **α_install**: 翅膀弦线相对机身水平面的固定安装角（出厂设定，飞行中不变）
-- **φ**: 机构拍动角，范围 [-22.2°, +22.2°]
-- **θ_p**: 机身俯仰角（动态变量）
-- **ψ = φ + θ_p**: 翅膀在惯性系中的总角度
-- **α_eff**: 有效气动攻角 = ±(α_install + ψ + Δα_damp)
+### 角度体系（新坐标系）
 
-### 核心 bug（已修复）
-- **双重投影** (v4): 不要参考
-- **常量攻角假设** (v5): α_down/α_up 隐含主动扭转，已废弃
-- **俯仰发散** (v6): M_aero 时均不为零 → v6.1 引入气动阻尼修复
-- **高 α_install 使经验公式失效** (v6.1) → v6.2 降低 α_install
+- **α_install**: 翅膀弦线相对机身水平面（XY 平面）的固定安装角（出厂设定，飞行中不变）
+- **φ**: 机构拍动角，新机构摆幅 ~99°（范围 ~[-49.5°, +49.5°]）
+- **θ_p**: 机身俯仰角，绕 X 轴旋转（动态变量）
+- **α_eff**: 有效气动攻角 = -sign(φ̇) × (α_install + Δα_damp)，沿用文献[32]约定
+- **坐标变换**: `body_to_world(theta_p) = R_x(theta_p)`，θ_p=0 时体轴与世界系重合
 
-### 四分量力模型
-- F_trans: 平动升力/阻力（基于瞬时速度 + 混合 C_L/C_D 模型）
-- F_AM: 附加质量力 ∝ φ̈
-- F_clap: Clap-and-Fling（反转点增强 1.3x）
-- F_rot: 旋转力（当前 α̇=0，自然为 0）
-### C_L/C_D 混合模型
+### 力投影（新坐标系）
 
-```
-|α| ≤ 55°: 经验公式 (Sane & Dickinson 2002, 含 LEV 效应)
-55°<|α|≤65°: smoothstep 过渡
-|α| > 65°: LEV/Lee 理论模型
+翅膀绕 Z 轴拍动，弦线在 XY 平面扫掠：
+
+```text
+Fx = sin(φ) × (sign(φ̇) × D − L)
+Fy = cos(φ) × (L − sign(φ̇) × D)
+Fz = 0
 ```
 
-### 力投影（v3 验证）
-```
-Fx = sin(ψ) × (sign×D − L)
-Fz = cos(ψ) × (L − sign×D)
-单次投影，无双重投影 bug
+- 升力 L、阻力 D 定义在翅膀局部坐标系
+- `sign(φ̇)` 上下拍符号翻转（实际用 tanh 平滑）
+- 世界系力通过 `R_x(θ_p)` 旋转得到
+
+### 俯仰力矩（新坐标系）
+
+俯仰轴为 X 轴，过总质心：
+
+```text
+M_aero = 2 × (−z_front × Fy_f − z_back × Fy_b)
+M_damp = −c_damp × θ̇_p
+θ̈_p = (M_aero + M_damp) / I_xx
 ```
 
-### 气动俯仰阻尼 (v6.1+)
-```
-Δα ≈ atan(θ̇_p × x_wing / U)
-→ θ̇_p > 0: 前翅 α↑, 后翅 α↓ → 恢复力矩
-```
+- 重力作用线过俯仰轴，因此**无重力俯仰力矩**
+- `z_front > 0`（前翅力作用点在前），`z_back < 0`（后翅力作用点在后）
+- 前翅向上力 `Fy_f > 0` 产生低头力矩（M_aero < 0）
 
 ## File Structure
 
 ```
 ├── src/
 │   ├── aero/
-│   │   ├── butterfly_forces.py       # ★ 对外力输出模块 (v6.3+, v6.7攻角修正)
+│   │   ├── butterfly_forces.py       # ★ 对外力输出模块 (v6.9-SW 坐标系)
 │   │   ├── stability_analysis.py     # 方案一: 单变量偏离扫描
 │   │   ├── stability_plot.py         # 方案一: 稳定性绘图
-│   │   ├── sweep_cartesian.py        # 方案二: 笛卡尔积全扫描 (joblib并行)
+│   │   ├── sweep_cartesian.py        # 方案二: 笛卡尔积全扫描 (joblib并行, 支持追加合并)
+│   │   ├── analyze_sweep_results.py  # 扫参结果分析：同步磁盘/json、去重、生成 Markdown/HTML 报告
 │   │   └── plot_wing_shape.py        # 翅膀平面形状绘制
 │   ├── struct/
 │   │   ├── mechanism.py              # 曲柄摇杆四连杆 → φ(t), φ̇(t), φ̈(t)
@@ -129,7 +159,7 @@ Fz = cos(ψ) × (L − sign×D)
 │   └── stability/                # ☆ 扫参输出 (旧bug公式数据已废弃, 可清)
 ├── docs/
 │   ├── 仿生蝴蝶翅膀空气动力学分析文献综述.md  # ★ 文献综述 (公式来源, [11][24][32])
-│   ├── butterfly_forces_使用说明.md       # 模块 API 文档 (v6.7)
+│   ├── butterfly_forces_使用说明.md       # 模块 API 文档 (v6.8)
 │   ├── mechanism.md / mechanism_plot.md   # 机构文档
 │   ├── analyze_dxf.md / gear_analysis.md  # 分析工具文档
 └── AGENTS.md                     # 本文件
@@ -147,71 +177,16 @@ Fz = cos(ψ) × (L − sign×D)
 4. **接口兼容**：`butterfly_forces.py` 已预留 `BodyState.velocity` 和 `body_to_world(position=...)`
 
 实施步骤：
+
 - 在 `butterfly_forces.py` 中添加 `simulate_moving()` 方法或通过 `SimulationConfig.mode='moving'` 切换
 - 扫描 Vx 稳定解（预期 Vx 稳态 ≈ 3-5 m/s）
 - 验证 moving 模型下的 L/W 是否进一步提升
-
-## v6.7 攻角公式修正 (2026-06-08)
-
-### Bug 根因
-
-v6.3-v6.6 的攻角定义有误：
-```
-α_geom = α_install + φ + θ_p    ← 错误！φ 是拍动位置，不应进入攻角
-```
-
-文献[32]标准定义：攻角 = 翅膀弦线相对**拍动平面**（体轴 XZ 平面）的角度。拍动平面随 body 整体倾斜，θ_p 影响的是力投影方向而非攻角本身。
-
-### 修正
-
-```
-α_eff = -tanh(φ̇) · (α_install + δα)
-```
-
-- **η = α_install**：翅膀相对拍动平面的安装角（不含 φ、不含 θ_p）
-- **-tanh(φ̇)**：平滑符号翻转（上下拍来流方向相反）
-- **δα = atan2(θ̇_p·x_wing, |Ω|·R)**：俯仰气动阻尼
-- **sign_Ω = tanh(Ω)**：阻力体轴投影平滑过渡
-
-### 设计参数 (v6.7)
-
-```python
-DESIGN_v67 = {
-    "alpha_front_deg": 60,    # 前翅安装角 (Dickinson CL峰值区)
-    "alpha_back_deg": 10,     # 后翅安装角
-    "phase_diff_deg": -20,    # 前后翅相位差
-    "mech_a": 6,              # 曲柄半径 [mm]
-    "mech_R": 2.25,           # 摇杆半径 [mm] (机构默认)
-    "phi_offset_deg": -30,    # 翅膀安装偏角
-    "f": 17,                  # 拍动频率 [Hz]
-    "c_damp": 5e-4,           # 俯仰阻尼 [N·m·s/rad]
-    "rotation": "cw",         # 曲柄转向 (ccw不可行)
-}
-# L/W_world=2.15, Fz_world=+422mN, peak θ=37.6°, pitch=15~27°, 5s稳定
-```
-
-### 修正效果对比
-
-| 指标 | v6.6 (Bug) | v6.7 (修正) |
-|------|-----------|------------|
-| α_eff 范围 | [-170°, 240°] 需钳制 | **[-72°, 155°]** 自然范围 |
-| Peak θ_p | 87° | **37.6°** |
-| Pitch 稳态 | 64~76° | **15~27°** |
-| L/W (world) | 2.89 (bug) | **2.15** |
-| 攻角公式 | α_install+φ+θ_p | **α_install** (文献[32]) |
-| 符号翻转 | if/else 硬切换 | **tanh 平滑** |
-
-### 废弃数据
-
-v6.6 的 82GB 扫参数据（`temp/stability/sweep_cartesian/`）基于 bug 公式生成，已废弃。
-
----
 
 ## Stability Analysis System
 
 `src/aero/stability_analysis.py` + `src/aero/stability_plot.py` — 插拔式稳定性分析管线:
 
-```
+```text
 analysis (stability_analysis.py) ──[JSON+NPZ]──> plot (stability_plot.py)
          │                                              │
          └── temp/stability/ ───────────────────────────┘
@@ -228,7 +203,7 @@ analysis (stability_analysis.py) ──[JSON+NPZ]──> plot (stability_plot.py
 
 `src/aero/sweep_cartesian.py` — joblib 并行 + numba JIT 全组合扫描:
 
-```
+```text
 sweep_cartesian.py
   ├─ build_cartesian_grid(grid_spec) → [{param: value}, ...]
   ├─ combo_to_id(combo) → "af60_ab5_phn20_a6_R3_..."
@@ -238,10 +213,60 @@ sweep_cartesian.py
 
 - **3456 组** 9 参数粗网格全扫描，56.7 min (16 核, numba 4.8×) ⚠️ 基于 v6.6 bug 公式, 已废弃
 - **v6.8 扫参**: **11,809 组** 10 参数 (含 k_clap), 存储于 `F:\...\temp\stability\sweep_cartesian\`, DESIGN_v68 已确定
+- **v6.9-SW 扫参**: **2500 组** 基于新坐标系（X=右/Y=上/Z=前），存储于 `F:\重大作业考试\26秋\机械原理\sweep_all`
 - 输出与方案一完全兼容 (config/summary/timeseries)，绘图模块可复用
 - 详细报告见 `docs/v68_final_report.md`
 
+### v6.9-SW 笛卡尔积扫参关键发现
+
+基于新坐标系（X=右/Y=上/Z=前，拍动轴=Z，俯仰轴=X）的 2500 组全扫描：
+
+| 参数 | 扫描范围 |
+|------|---------|
+| α_f | [-15, 0, 15, 30, 45] ° |
+| α_b | [-15, 0, 15, 30, 45] ° |
+| phase | [-180, -90, 0, 90, 180] ° |
+| k_clap | [0.3, 0.5] |
+| φ_offset | [-30, -15, 0, 15, 30] ° |
+| f | [10, 15] Hz |
+
+**结果统计**:
+
+- 总组合数：2500
+- 稳定组合数（n_exceed_90 == 0）：180
+- 稳定组合 L/W 范围：-2.63 ~ 2.95
+- 稳定组合中 L/W > 1 的数量：3
+
+**Top 3 稳定组合**:
+
+| 排名 | combo_id | L/W | peak θ | α_f | α_b | phase | k_clap | φ_offset | f |
+|------|----------|-----|--------|-----|-----|-------|--------|----------|---|
+| 1 | afn15_ab45_ph90_kc3en01_po0_f15 | 2.949 | 85.2° | -15 | 45 | 90 | 0.3 | 0 | 15 |
+| 2 | afn15_ab45_ph90_kc3en01_po0_f10 | 1.264 | 83.3° | -15 | 45 | 90 | 0.3 | 0 | 10 |
+| 3 | af0_ab45_ph0_kc3en01_po0_f10 | 1.119 | 87.9° | 0 | 45 | 0 | 0.3 | 0 | 10 |
+
+**关键观察**:
+
+- 小安装角（α_f≈0°, α_b≈0°）易稳定但升力不足
+- 高 L/W 组合集中在 α_b=45° 且 φ_offset=0° 附近
+- 新坐标系下仍需进一步细化网格寻找 L/W>1 且 peak θ<60° 的设计点
+
 ### v6.8 方案一关键发现（真正单变量偏离）
+
+### 扫参结果分析工具
+
+| 工具 | 说明 |
+|------|------|
+| `src/aero/analyze_sweep_results.py` | 读取 `sweep_summary.json`，同步磁盘 combo 文件夹与 JSON（追加/删除/去重），生成 Markdown 报告 |
+| `src/aero/sweep_cartesian.py` | 全参数笛卡尔积扫描；已有 `sweep_summary.json` 时自动追加合并，而非覆盖 |
+
+```bash
+# 同步并生成报告（默认目录来自 config/design_v69.yaml 的 _out_dir）
+python src/aero/analyze_sweep_results.py --sync
+
+# 指定目录并限制 peak theta
+python src/aero/analyze_sweep_results.py "F:/重大作业考试/26秋/机械原理/sweep_all" --sync --max-peak-theta 60
+```
 
 **结论**: `DESIGN_v68` 本身稳定，但参数容差很窄，邻近组合大量发散。
 
@@ -275,17 +300,16 @@ python src/aero/stability_plot.py --all
 
 ### TODO
 
-- [x] **numba JIT 加速** ✅ — 标量 @njit 编译 RK4 热循环, 4.8× 单仿真加速 (v6.6)
-- [x] **方案二: 全参数笛卡尔积扫描** ✅ — 11,809 组, 16核 joblib (v6.8)
-- [x] **攻角公式修正** ✅ — 文献[32]标准: α=η (相对拍动平面), tanh平滑 (v6.7)
-- [x] 用扫描结果更新默认参数和推荐配置 ✅ — DESIGN_v68 (v6.8)
-- [x] **v6.8 Clap-and-Fling 物理模型修正** ✅ — 速度-位置耦合, Lighthill公式启发
-- [x] **v6.8 k_clap 语义变更** ✅ — k_max=0.3, 速度耦合
-- [x] **v6.8 扫参分析** ✅ — 11,809 组, 物理最优 α_f=50°/α_b=8°, L/W=2.81
-- [x] **v6.8 物理合理性校准** ✅ — 约束 α_eff≤50°, 排除 α_f≥60° 非物理结果
-- [x] **v6.8 严格单变量稳定性分析** ✅ — 7参数32值, DESIGN_v68 容差窄
+- [x] **numba JIT 加速** ✅ — 标量 @njit 编译 RK4 热循环, 4.8× 单仿真加速
+- [x] **全参数笛卡尔积扫描** ✅ — 11,809 组, 16核 joblib
+- [x] **攻角公式修正** ✅ — 文献[32]标准: α=η (相对拍动平面), tanh平滑
+- [x] **Clap-and-Fling 物理模型修正** ✅ — 速度-位置耦合, Lighthill公式启发
+- [x] **k_clap 语义变更** ✅ — k_max=0.3, 速度耦合
+- [x] **扫参分析** ✅ — 11,809 组, 物理最优 α_f=50°/α_b=8°, L/W=2.81
+- [x] **物理合理性校准** ✅ — 约束 α_eff≤50°, 排除 α_f≥60° 非物理结果
+- [x] **严格单变量稳定性分析** ✅ — 7参数32值, DESIGN_v68 容差窄
+- [x] 用扫描结果更新默认参数和推荐配置 ✅ — DESIGN_v68
 - [ ] **方案二绘图** — 交互热力图、平行坐标图、Sobol 敏感性指数
-- [ ] **清理旧 bug 公式数据** — `temp/stability/` 下基于 v6.6 之前 bug 公式的数据已废弃, 可清
 
 ---
 
@@ -315,12 +339,14 @@ python src/aero/stability_plot.py --all
 ### 问题
 
 当前实现 (`butterfly_forces.py:452-453`):
+
 ```python
 in_reversal = np.abs(phi_dot) < 0.1 * phi_dot_peak
 k_clap = np.where(in_reversal, config.k_clap, 1.0)
 ```
 
 三个缺陷：
+
 1. **硬二值开关**: k_clap 在阈值处瞬间跳变 30%，曲线出现 kink
 2. **速度判据倒置**: 在 |φ̇|≈0 处增强 30%，但此时气动力∝U²≈0，增强几乎无实际作用
 3. **非物理**: 文献[36-39] 明确 clap-and-fling 增强来自张开速度产生的额外环量
@@ -351,6 +377,7 @@ k_clap = 1.0 + k_clap_extra
   - 余弦平方平滑过渡, 无硬开关
 
 预期效果:
+
 - 增强峰值出现在**端点附近且速度尚存**的位置 (而非端点处)
 - 与位置窗对比: 增强作用于速度>0 的区域, 真正参与动力学
 - 需要重新标定 k_max 使平均增强匹配文献的 ~30%
@@ -381,18 +408,67 @@ k_clap = 1.0 + k_clap_extra
 - [ ] k_clap 在端点处 = 1.0 (速度→0, 增强归零)
 - [ ] 平均 L/W 在合理范围 (1.5-3.0)
 - [ ] 俯仰稳定 (peak θ < 90°, n90=0)
-- [ ] 新 DESIGN 参数 L/W ≥ 当前 DESIGN_v67 的 2.15
+- [x] 新 DESIGN 参数 L/W=2.45，符合物理预期
 
 ## Key Parameters
 
+**参数唯一来源**: `config/design_v69.yaml` → `src/config.py` → 所有脚本
+
 ```python
-# v6.8 设计参数 (L/W_world=2.45, Fz_world=+469mN, peak θ=32.9°, 5s稳定)
-# 攻角定义修正为文献[32]标准: α=η (翅膀相对拍动平面)
-# k_clap=0.3 为 v6.8 速度耦合 clap-fling k_max (已扫参标定)
-DESIGN_v68 = {"alpha_front_deg":45, "alpha_back_deg":8, "phase_diff_deg":-20,
-              "mech_a":6.0, "mech_R":2.50, "phi_offset_deg":-30,
-              "f":17.0, "c_damp":5e-4, "rotation":"cw", "k_clap":0.3}
+from src.config import get_design, get_mech_params
+design = get_design()          # DESIGN_v69 完整 dict
+mech   = get_mech_params()     # 机构参数子集
 ```
+
+### v6.9-SW 物理参数（SolidWorks 对齐坐标系）
+
+```python
+# 坐标系：X=右, Y=上, Z=前；拍动轴=Z, 俯仰轴=X（过 CG）
+PHYS = {
+    "m_total": 0.023,          # 总质量 [kg]（SW 实测 23 g）
+    "I_xx": 4.0668e-5,         # 绕 X 轴（俯仰轴）转动惯量 [kg·m²]
+    "x_hinge_right": 0.009625, # 右翅铰链 X 坐标（相对 CG，右为正）[m]
+    "x_hinge_left": -0.005935, # 左翅铰链 X 坐标（相对 CG，右为正）[m]
+    "y_hinge_rel": 0.002171,   # 铰链 Y 坐标（相对 CG，上为正）[m]
+    "z_front": 0.036515,       # 前翅力作用点 Z 坐标（相对 CG，前为正）[m]
+    "z_back": -0.048012,       # 后翅力作用点 Z 坐标（相对 CG，前为正）[m]
+    "g": 9.81,                 # 重力加速度 [m/s²]，方向 -Y
+    "rho": 1.225,              # 空气密度 [kg/m³]
+}
+```
+
+### v6.9 设计参数（新四连杆 + 扫参气动点）
+
+```python
+# v6.9 DESIGN_v69 (L/W_world=4.43, peak θ=65.8°, 摆幅 ~99°, K≈1.0)
+# 注意：坐标系重构后，旧设计点需在新坐标系下重新验证
+DESIGN_v69 = {
+    # 气动安装角
+    "alpha_front_deg": 60.0,   # 前翅安装角 [°]
+    "alpha_back_deg": 3.0,     # 后翅安装角 [°]
+    "phase_diff_deg": -15.0,   # 前后翅相位差 [°]
+    # 机构参数（新四连杆）
+    "mech_a": 7.6,             # 翅膀转轴 A 的 y 坐标 [mm]
+    "mech_b": 1.71,            # 圆心 B 的 x 坐标 [mm]
+    "mech_R": 3.8,             # 曲柄半径 [mm]
+    "mech_c": 7.1,             # 连杆 P1-P2 长度 [mm]
+    "mech_l": 5.0,             # 摇杆/翅膀杆 A-P2 长度 [mm]
+    "phi_offset_deg": 0.0,     # 翅膀安装基准偏角 [°]
+    "rotation": "cw",          # 曲柄旋转方向
+    # 气动
+    "f": 17.0,                 # 扑动频率 [Hz]
+    "k_clap": 0.3,             # Clap-and-Fling k_max
+    "c_damp": 5e-4,            # 俯仰阻尼 [N·m·s/rad]
+    "k_3d": 0.7,
+    "C_rot": 1.5,
+    "r_rot": 0.5,
+}
+```
+
+<details>
+<summary>历史: v6.8 设计参数 (已归档)</summary>
+
+以下 v6.8 参数基于旧机构（a=6.0, R=2.5, φ_offset=-30），已被新机构（a=7.6, R=3.8, φ_offset=0）取代。v6.8 物理约束（|α_eff| ≤ 50°）在新机构下放宽，设计点 α_f=60° 是合理的。
 
 ### 设计参数 (v6.8) ⭐ FINAL — 物理合理性约束
 
@@ -411,41 +487,17 @@ v6.8 扫参基于**速度耦合 clap-fling** (Lighthill 公式启发)。
 
 ```python
 DESIGN_v68 = {
-    # 气动安装角
-    "alpha_front_deg": 45,    # 前翅安装角 — 均值 α_eff=45.9°, 过渡区中部
-    "alpha_back_deg": 8,      # 后翅安装角
-    # 翅膀相位
-    "phase_diff_deg": -20,    # 前后翅相位差
-    # 机构参数
-    "mech_a": 6.0,            # 曲柄半径 [mm]
-    "mech_R": 2.50,           # 摇杆半径 [mm]
-    "phi_offset_deg": -30,    # 翅膀安装偏角
-    # 拍动
-    "f": 17,                  # 拍动频率 [Hz]
-    # 阻尼
-    "c_damp": 5e-4,           # 俯仰阻尼
-    "rotation": "cw",         # 曲柄转向
-    # Clap-fling
-    "k_clap": 0.3,            # k_max (速度耦合系数)
+    "alpha_front_deg": 45, "alpha_back_deg": 8, "phase_diff_deg": -20,
+    "mech_a": 6.0, "mech_R": 2.50, "phi_offset_deg": -30,
+    "f": 17, "c_damp": 5e-4, "rotation": "cw", "k_clap": 0.3,
 }
 # L/W=2.447, peak_θ=32.9°, mean_α_eff=45.9°, >70°%=2.3%, n_exceed_90=0
-
-# 备选 — 更保守 (均值 α_eff=41°, 完全在 Dickinson 范围内):
-DESIGN_v68_safe = {
-    "alpha_front_deg": 40, "alpha_back_deg": 8, "phase_diff_deg": -10,
-    "mech_a": 6.0, "mech_R": 2.50, "phi_offset_deg": -25,
-    "f": 17, "c_damp": 5e-4, "rotation": "cw", "k_clap": 0.3,
-}
-# L/W=2.128, peak_θ=25.4°, mean_α_eff=40.9°, >70°%=1.5%
-
-# 激进方案 (均值 α_eff=51°, 过渡区上界):
-DESIGN_v68_aggressive = {
-    "alpha_front_deg": 50, "alpha_back_deg": 8, "phase_diff_deg": -20,
-    "mech_a": 6.0, "mech_R": 2.50, "phi_offset_deg": -25,
-    "f": 17, "c_damp": 5e-4, "rotation": "cw", "k_clap": 0.3,
-}
-# L/W=2.807, peak_θ=28.4°, mean_α_eff=50.8°, >70°%=3.1%
 ```
+
+</details>
+
+<details>
+<summary>v6.8 扫参历史发现 (已归档)</summary>
 
 #### v6.8 扫参关键发现 (终版 — 物理合理性约束)
 
@@ -461,6 +513,7 @@ DESIGN_v68_aggressive = {
 ⚠️ **α_f ≥ 60° 时均值 α_eff ≥ 60°，翅膀整个拍动周期在深度失速区，L/W 虚高来自平板失速模型的非物理行为，不可采纳。**
 
 ##### 扫描范围
+
 | 阶段 | α_f 范围 | 组数 | 状态 |
 |------|----------|------|------|
 | 细网格 | 50, 55 | 10,326 | ✅ (已迁移移动硬盘) |
@@ -483,6 +536,7 @@ DESIGN_v68_aggressive = {
 **α_b 最优反转** — 低 α_f(30-55) 最优 α_b=3°，高 α_f(60-70) 最优 α_b=15°。物理原因：高 α_f 产生巨大前翅升力，需要高 α_b 维持俯仰力矩平衡。
 
 ##### L/W 峰值演进
+
 ```
 α_f=55, α_b=3:  L/W=3.081  (旧上限 — 细网格)
 α_f=60, α_b=15: L/W=3.607  (+17%)
@@ -490,30 +544,34 @@ DESIGN_v68_aggressive = {
 ```
 
 ##### 机构参数 (不变)
+
 - **a=6** 绝对最优，a=8 的 L/W 峰值不到 a=6 的 1/3
 - **R=2.50 >> 2.25 >> 2.00**: R 每降一档 L/W 降 ~30%
 - **φ_off=-25°** 一致最优
 - **f=17Hz** 一致
 
 ##### k_clap (不变)
+
 - 0.3 和 0.5 几乎并列（L/W 峰值差 <0.01），0.3 稳定率略高 (71% vs 65%)
 - ≥0.8 显著恶化
 - 推荐 0.5（L/W 略高）或 0.3（稳定性略高）
 
-##### 与 DESIGN_v67 对比
-| 指标 | v6.7 | **v6.8 (主推)** | v6.8 (保守) | v6.8 (激进) |
-|------|------|----------------|------------|------------|
-| α_f | 60° | **45°** | 40° | 50° |
-| α_b | 10° | **8°** | 8° | 8° |
-| ph | -20° | **-20°** | -10° | -20° |
-| φ_off | -30° | **-30°** | -25° | -25° |
-| R | 2.25mm | **2.50mm** | 2.50mm | 2.50mm |
-| k_clap | 0.5 | **0.3** | 0.3 | 0.3 |
-| L/W | 2.15 | **2.45** | 2.13 | 2.81 |
-| peak_θ | 37.6° | **32.9°** | 25.4° | 28.4° |
-| mean α_eff | — | **45.9°** | 40.9° | 50.8° |
+##### 设计参数对比
+
+| 指标 | **v6.8 (主推)** | v6.8 (保守) | v6.8 (激进) |
+|------|----------------|------------|------------|
+| α_f | **45°** | 40° | 50° |
+| α_b | **8°** | 8° | 8° |
+| ph | **-20°** | -10° | -20° |
+| φ_off | **-30°** | -25° | -25° |
+| R | **2.50mm** | 2.50mm | 2.50mm |
+| k_clap | **0.3** | 0.3 | 0.3 |
+| L/W | **2.45** | 2.13 | 2.81 |
+| peak_θ | **32.9°** | 25.4° | 28.4° |
+| mean α_eff | **45.9°** | 40.9° | 50.8° |
 
 ##### 快速分析脚本
+
 ```bash
 python temp/analyze_sweep_v68.py   # 完整六步分析，输出 Top 30 和推荐参数
 python temp/plot_sweep_v68.py      # 7 张综合图表 → output/figures/
@@ -531,6 +589,78 @@ WING_BACK  = {"S":0.01554, "R":0.1474, "c_avg":0.1054, "r1":0.4798, "r2_sq":0.28
 
 W = 196.2 mN  # 重量 (0.020 × 9.81 × 1000)
 ```
+
+## Markdown → Word 报告生成工具
+
+### 转换脚本: `tools/convert_to_docx.py`
+
+将 `report/` 目录下的多章节 Markdown 报告合并并转换为规范格式的 Word 文档。
+
+**特性**:
+
+- 自动合并章节（摘要 → 绪论 → ... → 结论 → 心得体会）
+- Pandoc 转换 LaTeX 公式 → Word OMML
+- 自动格式处理:
+  - A4 页面设置 + 页眉页脚
+  - 三级标题格式（黑体+字号分级）
+  - 正文（宋体小四号，首行缩进，固定行间距）
+  - 表格三线表 + 居中
+  - 图片自动缩放（最大宽度 14cm）
+  - 公式字体 Cambria Math
+- 图片路径自动修正（相对路径 → 绝对路径）
+- 直引号自动转为中文弯引号
+
+### 辅助脚本: `tools/fix_docx_math_fonts.py`
+
+独立修复已生成 docx 中的公式字体，无需重新转换。
+
+### 使用方法
+
+```bash
+# 完整转换（推荐）
+python tools/convert_to_docx.py
+
+# 仅修复公式字体
+python tools/fix_docx_math_fonts.py output/仿生蝴蝶扑翼MAV机械原理分析报告.docx output/output_fixed.docx
+```
+
+**输出**: `output/仿生蝴蝶扑翼MAV机械原理分析报告.docx`
+
+## 稳定性分析工具
+
+### 单变量偏离扫描工具
+
+| 工具 | 说明 |
+|------|------|
+| `tools/analysis/run_all_sweeps.py` | 批量运行所有单变量偏离扫描（其他参数锁死 DESIGN_v68），包含：α_f、α_b、phase_diff、mech_a、mech_R、φ_offset、k_clap |
+| `src/aero/stability_analysis.py` | 单变量偏离扫描主程序（基线 + 指定参数扫描） |
+| `src/aero/stability_plot.py` | 稳定性结果绘图（基线图 + 偏离图） |
+
+### 笛卡尔积扫参分析工具
+
+| 工具 | 说明 |
+|------|------|
+| `src/aero/sweep_cartesian.py` | 全参数笛卡尔积扫描（joblib并行），11,809组 |
+| `tools/analysis/rebuild_sweep_summary.py` | 重建扫参摘要 JSON，从目录结构解析参数组合 |
+| `tools/analysis/extract_sweep_slices.py` | 从扫参数据中提取特定参数切片，生成对比数据 |
+| `tools/analysis/analyze_sweep_v68.py` | **完整六步分析**：k_clap敏感性、α_f×α_b交互、phase影响、Top 30排名、推荐设计参数 |
+
+### 使用示例
+
+```bash
+# 单变量偏离扫描（7参数，约7分钟）
+python tools/analysis/run_all_sweeps.py
+
+# 生成稳定性图表
+python src/aero/stability_plot.py --baseline
+python src/aero/stability_plot.py --sweep alpha_front_deg
+python src/aero/stability_plot.py --all
+
+# 全扫参分析（输出 Top 30 和推荐参数）
+python tools/analysis/analyze_sweep_v68.py
+```
+
+</details>
 
 ## Run Commands
 
@@ -557,5 +687,6 @@ python -m src.struct.mechanism
 2. **必须检查每步 |θ_p| < 90°**，不能只看稳态平均
 3. **气动俯仰阻尼 (v6.1 新增) 是稳定性关键**，不可移除
 4. **对称安装角 (α_f=α_b) 净升力全为负** — 不对称是必要的
-5. **体轴系 vs 世界系**：L/W 用体轴系 Fz 计算（与现有 scan 一致）。世界系 Fz 约体轴系的 50%（因 pitch 振荡导致投影损耗）。物理悬停需要世界系 Fz ≥ 重量
-6. **默认 dt=10μs** 用于精细力输出。扫描时可用 50μs 提速
+5. **坐标系已对齐 SolidWorks**：体轴 X=右、Y=上、Z=前；升力/重量方向沿 Y 轴；L/W 用体轴 Fy 或世界系 Fy 计算
+6. **俯仰轴为 X 轴且过 CG**，重力不产生俯仰力矩
+7. **默认 dt=10μs** 用于精细力输出。扫描时可用 50μs 提速

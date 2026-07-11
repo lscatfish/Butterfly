@@ -5,3 +5,9 @@ output/figures/
 __pycache__/
 *.pyc
 .unpackaged/
+.codegraph/
+.playwright-mcp/
+.opencode/
+备份/
+.claude/
+sweep_cartesian.rar

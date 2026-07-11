@@ -26,7 +26,8 @@ import numpy as np
 
 _PROJ = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_PROJ))
-from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, _HAS_NUMBA, DESIGN_v68
+from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, _HAS_NUMBA, DESIGN_v69
+from src.config import get_sweep_grid
 
 try:
     from joblib import Parallel, delayed
@@ -39,26 +40,24 @@ except ImportError:
 OUT_ROOT = _PROJ / "temp" / "stability" / "sweep_cartesian"
 
 # ============================================================
-# v6.8 基线参数 — 与 DESIGN_v68 保持一致
+# v6.9 基线参数 — DESIGN_v69 + 扫参模式数值设定
 # ============================================================
-BASELINE_CONFIG = {**DESIGN_v68, "dt": 50e-6, "t_end": 5.0, "steady_start": 3.0}
+BASELINE_CONFIG = {**DESIGN_v69, "dt": 50e-6, "t_end": 5.0, "steady_start": 3.0}
 
 # ============================================================
-# v6.8 默认笛卡尔积网格 — 以 DESIGN_v68 为中心的小范围加密
-# 3×3×3×1×1×2×1×1×1×2 = 108 组, 用于快速验证默认参数附近敏感度
+# v6.9 扫参配置 — 从 config/design_v69.yaml → sweep 读取
 # ============================================================
-DEFAULT_GRID = {
-    "alpha_front_deg":  [40, 45, 50],                    # 物理合理区
-    "alpha_back_deg":   [5, 8, 10],                       # DESIGN_v68=8
-    "phase_diff_deg":   [-30, -20, -10],                  # DESIGN_v68=-20
-    "mech_a":           [7.6],                            # 固定
-    "mech_R":           [3.8],                            # DESIGN_v68=3.8
-    "phi_offset_deg":   [0],                              # 新机构无偏移
-    "f":                [17],                             # DESIGN_v68=17
-    "c_damp":           [5e-4],                           # DESIGN_v68=5e-4
-    "rotation":         ["cw"],                           # DESIGN_v68=cw
-    "k_clap":           [0.3, 0.5],                       # DESIGN_v68=0.3
-}
+_sw_raw = get_sweep_grid()
+if not _sw_raw:
+    raise SystemExit("Error: config/design_v69.yaml 中没有 'sweep' 段")
+
+# 分离元配置（_ 前缀）和参数网格
+_META_KEYS = {k for k in _sw_raw if k.startswith("_")}
+SWEEP_META = {k: _sw_raw[k] for k in _META_KEYS}
+SWEEP_GRID = {k: v for k, v in _sw_raw.items() if not k.startswith("_")}
+
+OUT_ROOT = _PROJ / SWEEP_META.get("_out_dir", "temp/stability/sweep_cartesian")
+SWEEP_N_JOBS = int(SWEEP_META.get("_n_jobs", -1))
 
 PARAM_SHORT = {
     "alpha_front_deg": "af", "alpha_back_deg": "ab",
@@ -70,18 +69,26 @@ PARAM_SHORT = {
 
 
 # ---- combo_id 编解码 ----
+# 仅扫描参数（列表长度 > 1）参与目录名编码
+_SCAN_KEYS = [k for k, v in SWEEP_GRID.items()
+              if isinstance(v, (list, tuple)) and len(v) > 1]
+
+
 def combo_to_id(combo: dict) -> str:
-    """将参数字典编码为紧凑文件夹名 (可逆)."""
+    """将参数字典编码为紧凑文件夹名（仅扫描参数，科学计数法无精度丢失）。"""
     parts = []
-    for k in sorted(combo.keys()):
+    for k in _SCAN_KEYS:
         v = combo[k]
         short = PARAM_SHORT.get(k, k)
         if isinstance(v, float):
-            s = f"{v:.4f}".rstrip('0').rstrip('.').replace('.', 'p').replace('-', 'n')
+            mantissa, exp = f"{v:.6e}".split("e")
+            mantissa = mantissa.rstrip("0").rstrip(".")
+            s = f"{mantissa}e{exp}"
+            s = s.replace("e+", "ep").replace("e-", "en").replace(".", "p").replace("-", "n")
         elif isinstance(v, int):
-            s = str(v).replace('-', 'n')
+            s = str(v).replace("-", "n")
         else:
-            s = str(v).replace('.', 'p').replace('-', 'n')
+            s = str(v).replace("-", "n")
         parts.append(f"{short}{s}")
     return "_".join(parts)
 
@@ -105,16 +112,28 @@ def id_to_combo(combo_id: str, grid_keys: list) -> dict:
 
 
 # ---- 网格生成 ----
+def _normalize_grid(raw: dict) -> dict:
+    """将标量值包裹为单元素列表，多值列表原样保留。"""
+    out = {}
+    for k, v in raw.items():
+        if isinstance(v, (list, tuple)):
+            out[k] = list(v)
+        else:
+            out[k] = [v]
+    return out
+
+
 def build_cartesian_grid(grid_spec: dict = None) -> list:
     """从网格定义生成组合列表.
 
     Args:
-        grid_spec: {param_name: [values]}, 默认 DEFAULT_GRID.
+        grid_spec: {param_name: [values] 或 标量}, 默认 SWEEP_GRID (YAML > sweep).
 
     Returns:
         [{param: value}, ...] 所有笛卡尔积组合.
     """
-    grid = grid_spec or DEFAULT_GRID
+    raw = grid_spec or SWEEP_GRID
+    grid = _normalize_grid(raw)
     keys = list(grid.keys())
     values_list = list(grid.values())
     combos = [dict(zip(keys, combo)) for combo in product(*values_list)]
@@ -136,19 +155,19 @@ def _extract_timeseries(out) -> dict:
     """从 SimulationOutput 提取全时程数据 (与 stability_analysis 版本一致)."""
     half = len(out.t) // 2
 
-    Fz_body = np.zeros(len(out.t))
+    Fy_body = np.zeros(len(out.t))
     Fx_body = np.zeros(len(out.t))
-    Fz_world = np.zeros(len(out.t))
+    Fy_world = np.zeros(len(out.t))
     for wn in ["FL", "FR", "BL", "BR"]:
         w = out.wings[wn]
-        Fz_body += w.force_body[:, 2]
+        Fy_body += w.force_body[:, 1]
         Fx_body += w.force_body[:, 0]
-        Fz_world += w.force_world[:, 2]
+        Fy_world += w.force_world[:, 1]
 
-    Fz_f_total = out.wings["FL"].force_body[:, 2] + out.wings["FR"].force_body[:, 2]
-    Fz_b_total = out.wings["BL"].force_body[:, 2] + out.wings["BR"].force_body[:, 2]
-    M_aero = -out.config.x_front * Fz_f_total - out.config.x_back * Fz_b_total
-    M_grav = -out.config.m_total * out.config.g * out.config.d_cg * np.sin(out.theta_p)
+    Fy_f_total = out.wings["FL"].force_body[:, 1] + out.wings["FR"].force_body[:, 1]
+    Fy_b_total = out.wings["BL"].force_body[:, 1] + out.wings["BR"].force_body[:, 1]
+    # 前翅向上力 (Fy>0) 在 z_front>0 产生低头力矩 (负); 后翅在 z_back<0 产生抬头力矩 (正)
+    M_aero = -out.config.z_front * Fy_f_total - out.config.z_back * Fy_b_total
     M_damp = -out.config.c_damp * out.theta_dot
 
     return {
@@ -156,13 +175,12 @@ def _extract_timeseries(out) -> dict:
         "theta_p": out.theta_p,
         "theta_dot": out.theta_dot,
         "theta_ddot": out.theta_ddot,
-        "Fz_body_total": Fz_body,
+        "Fy_body_total": Fy_body,
         "Fx_body_total": Fx_body,
-        "Fz_world_total": Fz_world,
+        "Fy_world_total": Fy_world,
         "M_aero": M_aero,
-        "M_grav": M_grav,
         "M_damp": M_damp,
-        **{f"{wn}_Fz_body": out.wings[wn].force_body[:, 2] for wn in ["FL", "FR", "BL", "BR"]},
+        **{f"{wn}_Fy_body": out.wings[wn].force_body[:, 1] for wn in ["FL", "FR", "BL", "BR"]},
         **{f"{wn}_Fx_body": out.wings[wn].force_body[:, 0] for wn in ["FL", "FR", "BL", "BR"]},
         **{f"{wn}_alpha_eff": out.wings[wn].alpha_eff_deg for wn in ["FL", "FR", "BL", "BR"]},
         **{f"{wn}_C_L": out.wings[wn].C_L for wn in ["FL", "FR", "BL", "BR"]},
@@ -191,11 +209,10 @@ def _extract_summary(out, ts_dict: dict) -> dict:
         "peak_theta_deg": s["peak_theta_deg"],
         "n_exceed_90": s["n_exceed_90"],
         "weight_mN": weight_mN,
-        **_stats(ts_dict["Fz_body_total"] * 1000, "_Fz_body_mN"),
-        **_stats(ts_dict["Fz_world_total"] * 1000, "_Fz_world_mN"),
+        **_stats(ts_dict["Fy_body_total"] * 1000, "_Fy_body_mN"),
+        **_stats(ts_dict["Fy_world_total"] * 1000, "_Fy_world_mN"),
         **_stats(ts_dict["Fx_body_total"] * 1000, "_Fx_body_mN"),
         **_stats(ts_dict["M_aero"] * 1e6, "_M_aero_uNm"),
-        **_stats(ts_dict["M_grav"] * 1e6, "_M_grav_uNm"),
         **_stats(ts_dict["M_damp"] * 1e6, "_M_damp_uNm"),
         **_stats(np.abs(out.theta_dot), "_abs_thetadot_rads"),
         **_stats(np.abs(out.theta_ddot), "_abs_thetaddot_rads2"),
@@ -309,12 +326,13 @@ def sweep_cartesian(grid_spec: dict = None,
     out_root = out_root or OUT_ROOT
     out_root.mkdir(parents=True, exist_ok=True)
 
-    grid = grid_spec or DEFAULT_GRID
+    grid = grid_spec or SWEEP_GRID
     combos = build_cartesian_grid(grid)
     n_total = len(combos)
 
     # 单行摘要
-    grid_info = ", ".join(f"{k}={len(v)}" for k, v in grid.items())
+    grid_info = ", ".join(f"{k}={len(v) if isinstance(v, (list, tuple)) else 1}"
+                         for k, v in grid.items())
     nb_tag = "numba" if _HAS_NUMBA else "python"
     print(f"[Cartesian] {grid_info} → {n_total} combos | {nb_tag} × {n_jobs} workers")
     print(f"[Cartesian] Output: {out_root}")
@@ -361,40 +379,102 @@ def sweep_cartesian(grid_spec: dict = None,
 
 
 def _build_sweep_summary(results: list, grid_spec: dict, out_root: Path) -> dict:
-    """汇总所有 combo 的标量指标到 sweep_summary.json."""
+    """汇总所有 combo 的标量指标到 sweep_summary.json.
+
+    行为:
+      - 如果 sweep_summary.json 已存在, 先读取并按 combo_id 合并.
+      - 本次新结果会覆盖同 combo_id 的旧条目.
+      - 未被覆盖的旧条目保留.
+      - 如果文件不存在, 创建新文件.
+    """
     keys = ["_combo_id", "L/W", "L/W_body", "peak_theta_deg", "n_exceed_90",
-            "mean_Fz_body_mN", "mean_Fz_world_mN", "mean_Fx_body_mN",
+            "mean_Fy_body_mN", "mean_Fy_world_mN", "mean_Fx_body_mN",
             "mean_M_aero_uNm", "peak_M_aero_uNm",
-            "mean_M_grav_uNm", "peak_M_grav_uNm",
             "mean_M_damp_uNm", "peak_M_damp_uNm",
             "mean_abs_thetadot_rads", "peak_abs_thetadot_rads",
             "mean_abs_thetaddot_rads2", "peak_abs_thetaddot_rads2",
             "peak_alpha_eff_FL_deg", "peak_alpha_eff_BL_deg",
             "mean_CL_FL", "mean_CD_FL"]
 
+    summary_path = out_root / "sweep_summary.json"
+
+    # ---- 读取已有数据（如果存在） ----
+    existing_rows = {}
+    if summary_path.exists():
+        try:
+            with open(summary_path, encoding="utf-8") as f:
+                old = json.load(f)
+            n_old = old.get("_n_combos", 0)
+            if n_old > 0:
+                for i in range(n_old):
+                    cid = old["_combo_id"][i]
+                    row = {k: old.get(k, [None] * n_old)[i] for k in keys}
+                    row["_combo"] = {}
+                    for pk in old.get("_param_keys", []):
+                        row["_combo"][pk] = old.get(f"_param_{pk}", [None] * n_old)[i]
+                    existing_rows[cid] = row
+        except Exception as e:
+            print(f"  Warning: 读取已有 sweep_summary.json 失败, 将覆盖: {e}")
+            existing_rows = {}
+
+    # ---- 本次新结果 ----
+    new_rows = {}
+    param_keys = list(grid_spec.keys())
+    for sm in results:
+        cid = sm.get("_combo_id")
+        if cid is None:
+            continue
+        row = {k: sm.get(k, None) for k in keys}
+        row["_combo"] = sm.get("_combo", {})
+        new_rows[cid] = row
+
+    # ---- 合并：新结果覆盖旧结果 ----
+    merged_rows = {**existing_rows, **new_rows}
+
+    # ---- 重建 summary_data ----
     summary_data = {k: [] for k in keys}
-    # 每个 combo 的参数值也存一份
-    param_keys = list((grid_spec or DEFAULT_GRID).keys())
     for pk in param_keys:
         summary_data[f"_param_{pk}"] = []
 
-    for sm in results:
+    for cid in sorted(merged_rows.keys()):
+        row = merged_rows[cid]
+        summary_data["_combo_id"].append(cid)
         for k in keys:
-            summary_data[k].append(sm.get(k, None))
-        # 存储参数值
-        combo = sm.get("_combo", {})
+            if k != "_combo_id":
+                summary_data[k].append(row.get(k, None))
         for pk in param_keys:
-            summary_data[f"_param_{pk}"].append(combo.get(pk, None))
+            summary_data[f"_param_{pk}"].append(row["_combo"].get(pk, None))
 
-    # 网格元信息
-    summary_data["_grid"] = {k: list(v) for k, v in (grid_spec or DEFAULT_GRID).items()}
-    summary_data["_n_combos"] = len(results)
-    summary_data["_param_keys"] = list(grid_spec.keys())
+    # 网格元信息：取已有和本次 grid 的并集，保留最全的列表
+    _grid_meta = {}
+    for k in param_keys:
+        old_vals = set()
+        if summary_path.exists() and isinstance(existing_rows, dict):
+            for r in existing_rows.values():
+                if k in r["_combo"]:
+                    old_vals.add(r["_combo"][k])
+        new_vals = set()
+        for r in new_rows.values():
+            if k in r["_combo"]:
+                new_vals.add(r["_combo"][k])
+        all_vals = old_vals | new_vals
+        v_spec = grid_spec.get(k)
+        if isinstance(v_spec, (list, tuple)):
+            base = list(v_spec)
+        else:
+            base = [v_spec]
+        # 合并并排序，尽量保持数值顺序
+        merged_vals = sorted(all_vals, key=lambda x: (isinstance(x, str), x if isinstance(x, str) else float(x)))
+        _grid_meta[k] = merged_vals if len(merged_vals) > 1 else (merged_vals[0] if merged_vals else v_spec)
 
-    with open(out_root / "sweep_summary.json", "w") as f:
+    summary_data["_grid"] = _grid_meta
+    summary_data["_n_combos"] = len(merged_rows)
+    summary_data["_param_keys"] = param_keys
+
+    with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary_data, f, indent=2, ensure_ascii=False)
 
-    print(f"  Summary saved to {out_root / 'sweep_summary.json'}")
+    print(f"  Summary saved to {summary_path} (merged {len(existing_rows)} old + {len(new_rows)} new = {len(merged_rows)} combos)")
     return summary_data
 
 
@@ -404,8 +484,8 @@ def _build_sweep_summary(results: list, grid_spec: dict, out_root: Path) -> dict
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="笛卡尔积参数扫描 (方案二)")
-    ap.add_argument("--n-jobs", type=int, default=-1,
-                    help="并行 worker 数, -1=全部核心 (default: -1)")
+    ap.add_argument("--n-jobs", type=int, default=SWEEP_N_JOBS,
+                    help=f"并行 worker 数, -1=全部核心 (default: {SWEEP_N_JOBS})")
     ap.add_argument("--t-end", type=float, default=5.0)
     ap.add_argument("--dt", type=float, default=50e-6)
     ap.add_argument("--grid", type=str, default=None,
@@ -415,16 +495,17 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     if args.list_grid:
-        grid = DEFAULT_GRID
+        grid = SWEEP_GRID
         n = 1
         for v in grid.values():
-            n *= len(v)
-        print(f"Default grid ({n} combos):")
+            n *= len(v) if isinstance(v, (list, tuple)) else 1
+        print(f"Sweep grid from config/design_v69.yaml → sweep ({n} combos):")
         for k, v in grid.items():
-            print(f"  {k}: {v}")
+            tag = "scan" if isinstance(v, (list, tuple)) and len(v) > 1 else "fix"
+            print(f"  [{tag}] {k}: {v}")
         sys.exit(0)
 
-    grid_spec = DEFAULT_GRID
+    grid_spec = SWEEP_GRID
     if args.grid:
         with open(args.grid) as f:
             grid_spec = json.load(f)

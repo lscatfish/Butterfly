@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 """
-前置机构运动学可视化工具（已同步至新版 mechanism.py 四连杆模型）
+前置机构运动学可视化工具（参数来源：config/design_v69.yaml → mechanism.DEFAULT_PARAMS）
 
 功能：
 1. 机构几何示意图
-2. 顺/逆时针（cw/ccw）一个周期内的角度、角速度、角加速度对比
-3. a 参数扫描重叠图（角度、角速度）
+2. 顺/逆时针（cw/ccw）两个周期内的角度、角速度、角加速度对比
 
 用法:
-    python src/mechanism_plot.py                          # 默认 f=15 Hz, a=7.92
-    python src/mechanism_plot.py --a 9.0                  # 指定 a
-    python src/mechanism_plot.py --freq 20                # 指定频率
-    python src/mechanism_plot.py --phi-offset -50.84      # 带角度偏移（a=7.92 时关于 0° 对称）
-    python src/mechanism_plot.py --a-list 6 7 8 9 10 11   # 自定义 a 扫描列表
+    python src/struct/mechanism_plot.py                 # 生成图
+    python src/struct/mechanism_plot.py --no-plot       # 仅打印数值
 """
 
 import argparse
@@ -25,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 OUTPUT_DIR = ROOT / "output" / "figures" / "mechanism"
 
 from src.struct.mechanism import DEFAULT_PARAMS, solve_phi, wing_kinematics
+from src.config import get_design
 
 
 def analyze_geometry(params: dict, n_frames: int = 360):
@@ -101,8 +98,8 @@ def plot_mechanism_geometry(ax, params, n_poses=8):
     ax.set_ylabel('y (mm)')
 
 
-def plot_all(params, geo, valid, f, phi_offset_deg, a_list):
-    """统一绘图：6 个子图"""
+def plot_all(params, geo, valid, f, phi_offset_deg):
+    """统一绘图：4 个子图"""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -111,32 +108,35 @@ def plot_all(params, geo, valid, f, phi_offset_deg, a_list):
         print(f"Plotting skipped: {e}", file=sys.stderr)
         return
 
-    fig = plt.figure(figsize=(16, 10))
+    fig = plt.figure(figsize=(14, 10))
     plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
     plt.rcParams['axes.unicode_minus'] = False
 
     colors_rot = {'cw': '#1f77b4', 'ccw': '#d62728'}
-    colors_a = ["k", "b", "g", "r", "m", "orange", "c", "purple", "brown"]
 
     # ---- 1. 机构几何示意图 ----
-    ax1 = fig.add_subplot(2, 3, 1)
+    ax1 = fig.add_subplot(2, 2, 1)
     plot_mechanism_geometry(ax1, params)
 
-    # ---- 获取 cw / ccw 运动学数据 ----
+    # ---- 获取 cw / ccw 运动学数据（2 个周期） ----
     kin_data = {}
     for rot in ['cw', 'ccw']:
-        t, phi, phi_dot, phi_ddot, info = wing_kinematics(
+        t1, phi1, phi_dot1, phi_ddot1, info = wing_kinematics(
             f=f, a=params['a'], rotation=rot,
             phi_offset_deg=phi_offset_deg, params=params, n_points=2000)
+        T = 1.0 / f
         kin_data[rot] = {
-            't': t, 'phi': phi, 'phi_dot': phi_dot,
-            'phi_ddot': phi_ddot, 'info': info
+            't': np.concatenate([t1, t1 + T]),
+            'phi': np.concatenate([phi1, phi1]),
+            'phi_dot': np.concatenate([phi_dot1, phi_dot1]),
+            'phi_ddot': np.concatenate([phi_ddot1, phi_ddot1]),
+            'info': info
         }
 
     t_ms = lambda t: t * 1000
 
     # ---- 2. cw vs ccw: 角度 φ(t) ----
-    ax2 = fig.add_subplot(2, 3, 2)
+    ax2 = fig.add_subplot(2, 2, 2)
     for rot in ['cw', 'ccw']:
         d = kin_data[rot]
         rng = d['info']['phi_range_deg']
@@ -146,12 +146,12 @@ def plot_all(params, geo, valid, f, phi_offset_deg, a_list):
     ax2.axhline(0, color='gray', ls='--', lw=0.8)
     ax2.set_xlabel('Time (ms)')
     ax2.set_ylabel('Stroke angle φ (°)')
-    ax2.set_title(f'φ(t) @ {f} Hz (cw vs ccw)')
+    ax2.set_title(f'φ(t) — 2 periods @ {f} Hz')
     ax2.legend(fontsize=8)
     ax2.grid(True, alpha=0.3)
 
     # ---- 3. cw vs ccw: 角速度 φ̇(t) ----
-    ax3 = fig.add_subplot(2, 3, 3)
+    ax3 = fig.add_subplot(2, 2, 3)
     for rot in ['cw', 'ccw']:
         d = kin_data[rot]
         peak = d['info']['phi_dot_max_rad_s']
@@ -166,7 +166,7 @@ def plot_all(params, geo, valid, f, phi_offset_deg, a_list):
     ax3.grid(True, alpha=0.3)
 
     # ---- 4. cw vs ccw: 角加速度 φ̈(t) ----
-    ax4 = fig.add_subplot(2, 3, 4)
+    ax4 = fig.add_subplot(2, 2, 4)
     for rot in ['cw', 'ccw']:
         d = kin_data[rot]
         peak = d['info']['phi_ddot_max_rad_s2']
@@ -180,48 +180,6 @@ def plot_all(params, geo, valid, f, phi_offset_deg, a_list):
     ax4.legend(fontsize=8)
     ax4.grid(True, alpha=0.3)
 
-    # ---- 5. a 扫描：角度 φ(t) 重叠 ----
-    ax5 = fig.add_subplot(2, 3, 5)
-    for idx, a_val in enumerate(a_list):
-        try:
-            t, phi, _, _, info = wing_kinematics(
-                f=f, a=a_val, rotation='cw',
-                phi_offset_deg=phi_offset_deg, n_points=1000)
-            color = colors_a[idx % len(colors_a)]
-            span = info['phi_span_deg']
-            ax5.plot(t_ms(t), np.rad2deg(phi),
-                     color=color, lw=1.2,
-                     label=f'a={a_val}° (span={span:.1f}°)')
-        except Exception as e:
-            print(f"  a={a_val} skipped in φ plot: {e}")
-    ax5.axhline(0, color='gray', ls='--', lw=0.8)
-    ax5.set_xlabel('Time (ms)')
-    ax5.set_ylabel('Stroke angle φ (°)')
-    ax5.set_title(f'φ(t) for various a @ {f} Hz')
-    ax5.legend(fontsize=7, ncol=2)
-    ax5.grid(True, alpha=0.3)
-
-    # ---- 6. a 扫描：角速度 φ̇(t) 重叠 ----
-    ax6 = fig.add_subplot(2, 3, 6)
-    for idx, a_val in enumerate(a_list):
-        try:
-            t, _, phi_dot, _, info = wing_kinematics(
-                f=f, a=a_val, rotation='cw',
-                phi_offset_deg=phi_offset_deg, n_points=1000)
-            color = colors_a[idx % len(colors_a)]
-            peak = info['phi_dot_max_rad_s']
-            ax6.plot(t_ms(t), phi_dot,
-                     color=color, lw=1.2,
-                     label=f'a={a_val} ({peak:.1f})')
-        except Exception as e:
-            print(f"  a={a_val} skipped in φ̇ plot: {e}")
-    ax6.axhline(0, color='gray', ls='--', lw=0.8)
-    ax6.set_xlabel('Time (ms)')
-    ax6.set_ylabel('Angular velocity (rad/s)')
-    ax6.set_title(f'Angular velocity for various a @ {f} Hz')
-    ax6.legend(fontsize=7, ncol=2)
-    ax6.grid(True, alpha=0.3)
-
     offset_str = f", offset={phi_offset_deg}°" if phi_offset_deg is not None else ""
     fig.suptitle(f'Mechanism Kinematics: f={f} Hz, a={params["a"]}{offset_str}',
                  fontsize=14, fontweight='bold')
@@ -234,29 +192,117 @@ def plot_all(params, geo, valid, f, phi_offset_deg, a_list):
     print(f"\nSaved: {out_path}")
 
 
+def plot_rocker_kinematics(params, f, phi_offset_deg):
+    """摇杆（输出杆件）运动学分析：顺时针/逆时针各一张图，角量与线量分轴"""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except Exception as e:
+        print(f"Plotting skipped: {e}", file=sys.stderr)
+        return
+
+    l_m = params['l'] / 1000.0
+    T = 1.0 / f
+    t_ms = lambda t: t * 1000
+
+    plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
+    plt.rcParams['axes.unicode_minus'] = False
+
+    rotations = {
+        'cw':  ('顺时针 (cw)', '#2878B5'),
+        'ccw': ('逆时针 (ccw)', '#C82423'),
+    }
+
+    for rot, (rot_label, rot_color) in rotations.items():
+        t1, phi1, phi_dot1, phi_ddot1, info = wing_kinematics(
+            f=f, a=params['a'], rotation=rot,
+            phi_offset_deg=phi_offset_deg, params=params, n_points=2000)
+
+        t2 = np.concatenate([t1, t1 + T])
+        phi_dot2 = np.concatenate([phi_dot1, phi_dot1])
+        phi_ddot2 = np.concatenate([phi_ddot1, phi_ddot1])
+        v2 = l_m * np.abs(phi_dot2)
+        a2 = l_m * np.sqrt(phi_ddot2**2 + phi_dot2**4)
+
+        t = t_ms(t2)
+        peak_phi_dot = float(np.max(np.abs(phi_dot2)))
+        peak_phi_ddot = float(np.max(np.abs(phi_ddot2)))
+        peak_v = float(np.max(v2))
+        peak_a = float(np.max(a2))
+
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 9))
+
+        c_phi_dot = '#3498DB'   # 角速度: 蓝
+        c_phi_ddot = '#E74C3C'  # 角加速度: 红
+        c_v = '#27AE60'         # 线速度: 绿
+        c_a = '#F39C12'         # 线加速度: 橙
+
+        # ---- 子图1: 角量 (双 y 轴) ----
+        line1, = ax1.plot(t, phi_dot2, color=c_phi_dot, lw=1.8,
+                          label=f'角速度 (峰值 {peak_phi_dot:.1f} rad/s)')
+        ax1.set_ylabel('角速度 (rad/s)', color=c_phi_dot)
+        ax1.tick_params(axis='y', labelcolor=c_phi_dot)
+        ax1.set_xlabel('时间 (ms)')
+
+        ax1b = ax1.twinx()
+        line2, = ax1b.plot(t, phi_ddot2, color=c_phi_ddot, lw=1.8,
+                           label=f'角加速度 (峰值 {peak_phi_ddot:.0f} rad/s^2)')
+        ax1b.set_ylabel('角加速度 (rad/s^2)', color=c_phi_ddot)
+        ax1b.tick_params(axis='y', labelcolor=c_phi_ddot)
+
+        lines1 = [line1, line2]
+        labels1 = [l.get_label() for l in lines1]
+        ax1.set_title(f'摇杆角量 — {rot_label}', fontsize=12)
+        ax1.grid(True, alpha=0.2)
+        ax1.axhline(0, color='gray', ls='--', lw=0.6)
+        ax1.set_zorder(ax1b.get_zorder() + 1)
+        ax1.patch.set_visible(False)
+        ax1.legend(lines1, labels1, loc='lower right', fontsize=9, framealpha=0.9).set_zorder(10)
+
+        # ---- 子图2: 线量 (双 y 轴) ----
+        line3, = ax2.plot(t, v2, color=c_v, lw=1.8,
+                          label=f'线速度 (峰值 {peak_v:.2f} m/s)')
+        ax2.set_ylabel('线速度 (m/s)', color=c_v)
+        ax2.tick_params(axis='y', labelcolor=c_v)
+        ax2.set_xlabel('时间 (ms)')
+
+        ax2b = ax2.twinx()
+        line4, = ax2b.plot(t, a2, color=c_a, lw=1.8,
+                           label=f'线加速度 (峰值 {peak_a:.1f} m/s^2)')
+        ax2b.set_ylabel('线加速度 (m/s^2)', color=c_a)
+        ax2b.tick_params(axis='y', labelcolor=c_a)
+
+        lines2 = [line3, line4]
+        labels2 = [l.get_label() for l in lines2]
+        ax2.set_title(f'端点 P2 线量 (摇杆长 l={params["l"]:.1f} mm) — {rot_label}', fontsize=12)
+        ax2.grid(True, alpha=0.2)
+        ax2.set_zorder(ax2b.get_zorder() + 1)
+        ax2.patch.set_visible(False)
+        ax2.legend(lines2, labels2, loc='lower right', fontsize=9, framealpha=0.9).set_zorder(10)
+
+        fig.suptitle(f'摇杆运动学分析  (f={f} Hz, a={params["a"]} mm) — {rot_label}',
+                     fontsize=14, fontweight='bold')
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        fname = f'摇杆运动学分析-{rot}.svg'
+        out_path = OUTPUT_DIR / fname
+        plt.savefig(out_path, format='svg', bbox_inches="tight")
+        plt.close(fig)
+        print(f"Saved: {out_path}")
+
+
 def main():
+    design = get_design()
+    f = design["f"]
+    params = dict(DEFAULT_PARAMS)
+    phi_offset_deg = params.get('phi_offset_deg', 0.0)
+
     parser = argparse.ArgumentParser(description="Mechanism kinematics visualization")
-    parser.add_argument("--a", type=float, default=DEFAULT_PARAMS['a'],
-                        help="Parameter a (wing hinge y-coordinate)")
-    parser.add_argument("--a-list", type=float, nargs="+",
-                        default=[6.0, 7.0, 7.6, 8.0, 9.0, 10.0],
-                        help="a values to scan")
-    parser.add_argument("--freq", type=float, default=15.0,
-                        help="Flapping frequency in Hz (default: 15)")
-    parser.add_argument("--phi-offset", type=float, default=None,
-                        help="Fixed angle offset (deg). "
-                             "Default uses mechanism.py DEFAULT_PARAMS['phi_offset_deg'].")
     parser.add_argument("--no-plot", action="store_true")
     args = parser.parse_args()
 
-    params = {**DEFAULT_PARAMS, 'a': args.a}
-
-    # 若未显式指定 offset，使用 mechanism.py 默认值（出厂固定折弯）
-    effective_offset = args.phi_offset
-    if effective_offset is None:
-        effective_offset = DEFAULT_PARAMS.get('phi_offset_deg', 0.0)
-
-    # 纯几何分析
     geo, valid = analyze_geometry(params)
     print("=" * 60)
     print("机构几何分析（纯几何，与频率无关）")
@@ -268,20 +314,20 @@ def main():
           f"{np.rad2deg(geo['phi_max_rad']):.2f}]°")
     print(f"  有效帧: {geo['n_valid']} / {len(valid)}")
 
-    # 运动学分析
-    print(f"\n运动学分析 @ {args.freq} Hz:")
+    print(f"\n运动学分析 @ {f} Hz:")
     for rot in ['cw', 'ccw']:
         _, phi, phi_dot, phi_ddot, info = wing_kinematics(
-            f=args.freq, a=args.a, rotation=rot,
-            phi_offset_deg=args.phi_offset, params=params)
+            f=f, a=params['a'], rotation=rot,
+            phi_offset_deg=phi_offset_deg, params=params)
         span = info['phi_span_deg']
         peak_vel = info['phi_dot_max_rad_s']
         peak_acc = info['phi_ddot_max_rad_s2']
-        print(f"  rotation='{rot}', offset={effective_offset:.2f}°: "
+        print(f"  rotation='{rot}', offset={phi_offset_deg:.2f}°: "
               f"span={span:.2f}°, |φ̇|max={peak_vel:.2f}, |φ̈|max={peak_acc:.2f}")
 
     if not args.no_plot:
-        plot_all(params, geo, valid, args.freq, effective_offset, args.a_list)
+        plot_all(params, geo, valid, f, phi_offset_deg)
+        plot_rocker_kinematics(params, f, phi_offset_deg)
 
     print("\nDone!")
 

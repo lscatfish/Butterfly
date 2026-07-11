@@ -16,14 +16,14 @@ from matplotlib import ticker
 _PROJ = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_PROJ))
 
-from src.aero.butterfly_forces import DESIGN_v68
+from src.aero.butterfly_forces import DESIGN_v69
 
 STABILITY_DIR = _PROJ / "temp" / "stability"
 OUT_DIR = _PROJ / "output" / "figures" / "stability"
 BASELINE_DIR = STABILITY_DIR / "baseline"
 
-# 基线参数 (与 stability_analysis.py / DESIGN_v68 保持一致)
-BASELINE_CONFIG = {**DESIGN_v68, "dt": 50e-6, "t_end": 5.0, "steady_start": 3.0}
+# 基线参数 (与 stability_analysis.py / DESIGN_v69 保持一致)
+BASELINE_CONFIG = {**DESIGN_v69, "dt": 50e-6, "t_end": 5.0, "steady_start": 3.0}
 
 # 中文字体
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'DejaVu Sans']

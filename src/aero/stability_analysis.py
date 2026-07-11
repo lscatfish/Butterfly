@@ -25,28 +25,28 @@ import numpy as np
 
 _PROJ = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_PROJ))
-from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, DESIGN_v68
+from src.aero.butterfly_forces import SimulationConfig, ButterflyForceModel, DESIGN_v69
 
 OUT_ROOT = _PROJ / "temp" / "stability"
 BASELINE_DIR = OUT_ROOT / "baseline"
 
 
 # ============================================================
-# 基线参数 — 与 SimulationConfig / DESIGN_v68 保持一致
+# 基线参数 — 与 SimulationConfig / DESIGN_v69 保持一致
 # ============================================================
-BASELINE_CONFIG = {**DESIGN_v68, "dt": 50e-6, "t_end": 5.0, "steady_start": 3.0}
+BASELINE_CONFIG = {**DESIGN_v69, "dt": 50e-6, "t_end": 5.0, "steady_start": 3.0}
 
 # ============================================================
-# 扫描方案: 与 F:\...\sweep_cartesian 11,622 组全量网格保持一致
+# 扫描方案: 与 F:\...\sweep_cartesian 全量网格保持一致
 # 这样方案一单变量扫描可直接视为全量数据的切片, 无需重跑.
-# 注意: DESIGN_v68 α_f=45° 不在该网格中, 是单独标定的设计点.
+# 注意: DESIGN_v69 α_f=60° 是扫参确定的设计点.
 # ============================================================
 SWEEP_RANGES = {
     "alpha_front_deg":  [30, 40, 50, 55, 60, 70],
     "alpha_back_deg":   [3, 5, 8, 10, 15],
     "phase_diff_deg":   [-30, -25, -20, -15, -10],
     "mech_a":           [7.6],                            # 固定
-    "mech_R":           [3.8],                            # DESIGN_v68=3.8
+    "mech_R":           [3.8],                            # DESIGN_v69=3.8
     "phi_offset_deg":   [0],                              # 新机构无偏移
     "k_clap":           [0.3, 0.5, 0.8, 1.0, 1.5],
 }
@@ -76,23 +76,19 @@ def _extract_timeseries(out) -> dict:
     half = len(out.t) // 2
 
     # 四翅聚合
-    Fz_body = np.zeros(len(out.t))
+    Fy_body = np.zeros(len(out.t))
     Fx_body = np.zeros(len(out.t))
-    Fz_world = np.zeros(len(out.t))
+    Fy_world = np.zeros(len(out.t))
     for wn in ["FL", "FR", "BL", "BR"]:
         w = out.wings[wn]
-        Fz_body += w.force_body[:, 2]
+        Fy_body += w.force_body[:, 1]
         Fx_body += w.force_body[:, 0]
-        Fz_world += w.force_world[:, 2]
+        Fy_world += w.force_world[:, 1]
 
-    # M_aero: 从前后翅 Fz_body 计算
-    # M = 2 * (-x_front * Fz_f - x_back * Fz_b)  其中每翅贡献 = Fz_wing
-    # FL+FR 合计 = 2*Fz_f, BL+BR 合计 = 2*Fz_b
-    # M_aero = -x_front*(Fz_FL+Fz_FR) - x_back*(Fz_BL+Fz_BR)
-    Fz_f_total = out.wings["FL"].force_body[:, 2] + out.wings["FR"].force_body[:, 2]
-    Fz_b_total = out.wings["BL"].force_body[:, 2] + out.wings["BR"].force_body[:, 2]
-    M_aero = -out.config.x_front * Fz_f_total - out.config.x_back * Fz_b_total
-    M_grav = -out.config.m_total * out.config.g * out.config.d_cg * np.sin(out.theta_p)
+    # M_aero: 俯仰轴 = X (过 CG), 气动力在 Y 方向, 力臂 = z_front/z_back
+    Fy_f_total = out.wings["FL"].force_body[:, 1] + out.wings["FR"].force_body[:, 1]
+    Fy_b_total = out.wings["BL"].force_body[:, 1] + out.wings["BR"].force_body[:, 1]
+    M_aero = -out.config.z_front * Fy_f_total - out.config.z_back * Fy_b_total
     M_damp = -out.config.c_damp * out.theta_dot
 
     return {
@@ -100,24 +96,23 @@ def _extract_timeseries(out) -> dict:
         "theta_p": out.theta_p,
         "theta_dot": out.theta_dot,
         "theta_ddot": out.theta_ddot,
-        "Fz_body_total": Fz_body,
+        "Fy_body_total": Fy_body,
         "Fx_body_total": Fx_body,
-        "Fz_world_total": Fz_world,
+        "Fy_world_total": Fy_world,
         "M_aero": M_aero,
-        "M_grav": M_grav,
         "M_damp": M_damp,
         # 每翅关键量
-        **{f"{wn}_Fz_body": out.wings[wn].force_body[:, 2] for wn in ["FL", "FR", "BL", "BR"]},
+        **{f"{wn}_Fy_body": out.wings[wn].force_body[:, 1] for wn in ["FL", "FR", "BL", "BR"]},
         **{f"{wn}_Fx_body": out.wings[wn].force_body[:, 0] for wn in ["FL", "FR", "BL", "BR"]},
         **{f"{wn}_alpha_eff": out.wings[wn].alpha_eff_deg for wn in ["FL", "FR", "BL", "BR"]},
         **{f"{wn}_C_L": out.wings[wn].C_L for wn in ["FL", "FR", "BL", "BR"]},
         **{f"{wn}_C_D": out.wings[wn].C_D for wn in ["FL", "FR", "BL", "BR"]},
         **{f"{wn}_phi": out.wings[wn].phi for wn in ["FL", "FR", "BL", "BR"]},
-        # 摇杆主矢: 存 X/Z 分量 (在机构平面 XZ 内, Y=0)
+        # 摇杆主矢: 存 X/Y 分量 (在机构平面 XY 内, Z=0)
         **{f"{wn}_rocker_pv_x": out.wings[wn].rocker_principal_vec[:, 0] for wn in ["FL", "FR", "BL", "BR"]},
-        **{f"{wn}_rocker_pv_z": out.wings[wn].rocker_principal_vec[:, 2] for wn in ["FL", "FR", "BL", "BR"]},
-        # 摇杆主矩: Y 分量 (绕 Y 轴的有效扭矩)
-        **{f"{wn}_rocker_pm_y": out.wings[wn].rocker_principal_moment[:, 1] for wn in ["FL", "FR", "BL", "BR"]},
+        **{f"{wn}_rocker_pv_y": out.wings[wn].rocker_principal_vec[:, 1] for wn in ["FL", "FR", "BL", "BR"]},
+        # 摇杆主矩: Z 分量 (绕 Z 轴的有效扭矩)
+        **{f"{wn}_rocker_pm_z": out.wings[wn].rocker_principal_moment[:, 2] for wn in ["FL", "FR", "BL", "BR"]},
     }
 
 
@@ -141,13 +136,12 @@ def _extract_summary(out, ts_dict: dict) -> dict:
         "peak_theta_deg": s["peak_theta_deg"],
         "n_exceed_90": s["n_exceed_90"],
         "weight_mN": weight_mN,
-        # Fz / Fx
-        **_stats(ts_dict["Fz_body_total"] * 1000, "_Fz_body_mN"),
-        **_stats(ts_dict["Fz_world_total"] * 1000, "_Fz_world_mN"),
+        # Fy / Fx
+        **_stats(ts_dict["Fy_body_total"] * 1000, "_Fy_body_mN"),
+        **_stats(ts_dict["Fy_world_total"] * 1000, "_Fy_world_mN"),
         **_stats(ts_dict["Fx_body_total"] * 1000, "_Fx_body_mN"),
         # 力矩
         **_stats(ts_dict["M_aero"] * 1e6, "_M_aero_uNm"),
-        **_stats(ts_dict["M_grav"] * 1e6, "_M_grav_uNm"),
         **_stats(ts_dict["M_damp"] * 1e6, "_M_damp_uNm"),
         # 俯仰运动
         **_stats(np.abs(out.theta_dot), "_abs_thetadot_rads"),
@@ -340,9 +334,8 @@ def _val_to_str(val) -> str:
 
 def _build_sweep_summary(summaries: list, param_name: str) -> dict:
     keys = ["_value", "L/W", "peak_theta_deg", "n_exceed_90",
-            "mean_Fz_body_mN", "mean_Fz_world_mN", "mean_Fx_body_mN",
+            "mean_Fy_body_mN", "mean_Fy_world_mN", "mean_Fx_body_mN",
             "mean_M_aero_uNm", "peak_M_aero_uNm",
-            "mean_M_grav_uNm", "peak_M_grav_uNm",
             "mean_M_damp_uNm", "peak_M_damp_uNm",
             "mean_abs_thetadot_rads", "peak_abs_thetadot_rads",
             "mean_abs_thetaddot_rads2", "peak_abs_thetaddot_rads2",
